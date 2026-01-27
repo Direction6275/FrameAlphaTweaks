@@ -2,6 +2,7 @@ package-as: FrameAlphaTweaks
 
 manual-changelog: CHANGELOG.md
 changelog-type: markdown
+no-changelog: true
 
 ignore:
   - README.md
