@@ -1239,6 +1239,16 @@ end
 
     NS.RefreshUI = RefreshUI
 
+    local function RegisterEscapeClose(frame)
+        if not frame or not frame.GetName or not UISpecialFrames then return end
+        local name = frame:GetName()
+        if not name then return end
+        for i = 1, #UISpecialFrames do
+            if UISpecialFrames[i] == name then return end
+        end
+        table.insert(UISpecialFrames, name)
+    end
+
     local function BuildConfigWindow()
         local root, charKey, profName, prof = GetRoot()
         if UI.frameWidget then return end
@@ -1252,6 +1262,7 @@ end
         f:SetLayout("Flow")
         f:EnableResize(false)
         if f.frame then f.frame:SetFrameStrata("MEDIUM"); f.frame:SetFrameLevel(10) end
+        if f.frame then RegisterEscapeClose(f.frame) end
 
         f:SetCallback("OnClose", function(widget)
             -- Close any auxiliary windows
