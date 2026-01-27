@@ -1,0 +1,11 @@
+package-as: FrameAlphaTweaks
+
+ignore:
+  - README.md
+  - CHANGELOG.md
+  - LICENSE
+  - .gitignore
+  # GitHub workflow/config files are not needed in addon packages.
+  - .github
+  - .vscode
+  - .editorconfig
