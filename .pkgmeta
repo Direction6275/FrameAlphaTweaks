@@ -1,0 +1,12 @@
+package-as: FrameAlphaTweaks
+
+ignore:
+  - README.md
+  - CHANGELOG.md
+  - LICENSE
+  - .gitignore
+  - .editorconfig
+
+  # GitHub / editor metadata
+  - .github/**
+  - .vscode/**
