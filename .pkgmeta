@@ -1,12 +1,12 @@
 package-as: FrameAlphaTweaks
 
+manual-changelog: CHANGELOG.md
+changelog-type: markdown
+
 ignore:
   - README.md
-  - CHANGELOG.md
   - LICENSE
   - .gitignore
-  - .editorconfig
-
-  # GitHub / editor metadata
   - .github/**
   - .vscode/**
+  - .editorconfig
