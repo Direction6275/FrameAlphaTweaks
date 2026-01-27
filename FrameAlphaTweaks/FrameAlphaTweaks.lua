@@ -1886,6 +1886,30 @@ RefreshUI()
             RefreshUI()
         end
     end
+
+    local function HandleCombatState(inCombat)
+        if inCombat then
+            if UI.frameWidget and UI.frameWidget.frame:IsShown() then
+                UI.reopenAfterCombat = true
+                UI.frameWidget.frame:Hide()
+                print("|cff00c8ffFAT:|r Config closed for combat; it will reopen when combat ends.")
+            end
+            return
+        end
+
+        if UI.reopenAfterCombat then
+            UI.reopenAfterCombat = nil
+            GetRoot()
+            if not UI.frameWidget then
+                BuildConfigWindow()
+                return
+            end
+            UI.frameWidget.frame:Show()
+            RefreshUI()
+        end
+    end
+
+    NS.HandleCombatState = HandleCombatState
 end
 
 -- Optional: keep a tiny entry in Blizzard settings that just opens the standalone window.
@@ -1924,6 +1948,8 @@ end
 local ev = CreateFrame("Frame")
 ev:RegisterEvent("ADDON_LOADED")
 ev:RegisterEvent("PLAYER_ENTERING_WORLD")
+ev:RegisterEvent("PLAYER_REGEN_DISABLED")
+ev:RegisterEvent("PLAYER_REGEN_ENABLED")
 
 ev:SetScript("OnEvent", function(self, event, arg1, ...)
     if event == "ADDON_LOADED" and arg1 == ADDON then
@@ -1937,6 +1963,20 @@ ev:SetScript("OnEvent", function(self, event, arg1, ...)
         print("|cff00c8ffFAT:|r Loaded. Type |cffffff00/fat|r for options.")
         RegisterBlizzardOptionsStub()
         RebuildEntries()
+        return
+    end
+
+    if event == "PLAYER_REGEN_DISABLED" then
+        if NS.HandleCombatState then
+            NS.HandleCombatState(true)
+        end
+        return
+    end
+
+    if event == "PLAYER_REGEN_ENABLED" then
+        if NS.HandleCombatState then
+            NS.HandleCombatState(false)
+        end
     end
 end)
 
