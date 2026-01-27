@@ -1251,7 +1251,23 @@ end
         f:SetHeight(680)
         f:SetLayout("Flow")
         f:EnableResize(false)
-        if f.frame then f.frame:SetFrameStrata("MEDIUM"); f.frame:SetFrameLevel(10) end
+        if f.frame then
+            f.frame:SetFrameStrata("MEDIUM")
+            f.frame:SetFrameLevel(10)
+            local escName = "FrameAlphaTweaksConfig"
+            _G[escName] = f.frame
+            UISpecialFrames = UISpecialFrames or {}
+            local alreadyListed = false
+            for _, name in ipairs(UISpecialFrames) do
+                if name == escName then
+                    alreadyListed = true
+                    break
+                end
+            end
+            if not alreadyListed then
+                table.insert(UISpecialFrames, escName)
+            end
+        end
 
         f:SetCallback("OnClose", function(widget)
             -- Close any auxiliary windows
