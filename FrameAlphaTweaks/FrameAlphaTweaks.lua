@@ -1251,7 +1251,37 @@ end
         f:SetHeight(680)
         f:SetLayout("Flow")
         f:EnableResize(false)
-        if f.frame then f.frame:SetFrameStrata("MEDIUM"); f.frame:SetFrameLevel(10) end
+        if f.frame then
+            f.frame:SetFrameStrata("MEDIUM")
+            f.frame:SetFrameLevel(10)
+            f.frame:EnableKeyboard(true)
+            f.frame:SetPropagateKeyboardInput(false)
+            f.frame:SetScript("OnKeyDown", function(frame, key)
+                if key ~= "ESCAPE" then
+                    return
+                end
+
+                local function OtherEscClosableWindowsOpen(excludeFrame)
+                    if not UISpecialFrames then
+                        return false
+                    end
+                    for _, name in ipairs(UISpecialFrames) do
+                        local escFrame = _G[name]
+                        if escFrame and escFrame ~= excludeFrame and escFrame:IsShown() then
+                            return true
+                        end
+                    end
+                    return false
+                end
+
+                frame.obj:Hide()
+                if not OtherEscClosableWindowsOpen(frame) then
+                    if ToggleGameMenu and (not GameMenuFrame or not GameMenuFrame:IsShown()) then
+                        ToggleGameMenu()
+                    end
+                end
+            end)
+        end
 
         f:SetCallback("OnClose", function(widget)
             -- Close any auxiliary windows
