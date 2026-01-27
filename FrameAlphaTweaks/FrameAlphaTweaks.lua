@@ -1252,13 +1252,26 @@ end
         f:SetLayout("Flow")
         f:EnableResize(false)
         if f.frame then
+            local function HasOtherEscapeWindows(selfFrame)
+                if type(UISpecialFrames) ~= "table" then return false end
+                for _, name in ipairs(UISpecialFrames) do
+                    local other = name and _G[name]
+                    if other and other ~= selfFrame and other:IsShown() then
+                        return true
+                    end
+                end
+                return false
+            end
+
             f.frame:SetFrameStrata("MEDIUM")
             f.frame:SetFrameLevel(10)
             f.frame:EnableKeyboard(true)
-            f.frame:SetPropagateKeyboardInput(true)
+            f.frame:SetPropagateKeyboardInput(false)
             f.frame:SetScript("OnKeyDown", function(frame, key)
-                if key == "ESCAPE" then
-                    frame.obj:Hide()
+                if key ~= "ESCAPE" then return end
+                frame.obj:Hide()
+                if not HasOtherEscapeWindows(frame) and (not GameMenuFrame or not GameMenuFrame:IsShown()) then
+                    ToggleGameMenu()
                 end
             end)
         end
