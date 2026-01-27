@@ -1251,7 +1251,17 @@ end
         f:SetHeight(680)
         f:SetLayout("Flow")
         f:EnableResize(false)
-        if f.frame then f.frame:SetFrameStrata("MEDIUM"); f.frame:SetFrameLevel(10) end
+        if f.frame then
+            f.frame:SetFrameStrata("MEDIUM")
+            f.frame:SetFrameLevel(10)
+            f.frame:EnableKeyboard(true)
+            f.frame:SetPropagateKeyboardInput(true)
+            f.frame:SetScript("OnKeyDown", function(frame, key)
+                if key == "ESCAPE" then
+                    frame.obj:Hide()
+                end
+            end)
+        end
 
         f:SetCallback("OnClose", function(widget)
             -- Close any auxiliary windows
