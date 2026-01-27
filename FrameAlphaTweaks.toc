@@ -2,7 +2,7 @@
 ## Title: Frame Alpha Tweaks
 ## Notes: Fade/alpha tweaks for frames with group rules and profiles.
 ## Author: Cantrelle
-## Version: 1.0.5
+## Version: 1.0.6
 ## SavedVariables: FrameAlphaTweaksDB
 
 # Embedded Ace3 (for AceGUI widgets; ElvUI can skin these automatically)
