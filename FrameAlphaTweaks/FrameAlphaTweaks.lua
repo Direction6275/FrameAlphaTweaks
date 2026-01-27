@@ -1869,6 +1869,10 @@ RefreshUI()
     end
 
     NS.ToggleConfig = function()
+        if InCombatLockdown and InCombatLockdown() then
+            print("|cff00c8ffFAT:|r Config cannot be opened in combat.")
+            return
+        end
         GetRoot()
         if not UI.frameWidget then
             BuildConfigWindow()
