@@ -964,6 +964,16 @@ else
         local addBtn = AceGUI:Create("Button")
         addBtn:SetText("Add")
         addBtn:SetWidth(60)
+        local function GetFrameProtectionStatus(frame)
+            if not frame then return nil end
+            if frame.IsForbidden and frame:IsForbidden() then
+                return "forbidden"
+            end
+            if frame.IsProtected and frame:IsProtected() then
+                return "protected"
+            end
+            return nil
+        end
         addBtn:SetCallback("OnClick", function()
             EnsureSelectedGroup()
             local g = cfg.groups[UI.selectedGroup]
@@ -974,6 +984,12 @@ else
             -- ERROR if frame does not exist
             if not _G[name] then
                 print("|cff00c8ffFAT:|r Error: Frame does not exist: " .. name)
+                frameEdit:SetText("")
+                return
+            end
+            local protectionStatus = GetFrameProtectionStatus(_G[name])
+            if protectionStatus then
+                print("|cff00c8ffFAT:|r Error: Frame is " .. protectionStatus .. " and cannot be managed: " .. name)
                 frameEdit:SetText("")
                 return
             end
@@ -1003,6 +1019,15 @@ else
         local function AddFrameToGroup(frameName)
             EnsureSelectedGroup()
             local g = cfg.groups[UI.selectedGroup]
+            if not _G[frameName] then
+                print("|cff00c8ffFAT:|r Error: Frame does not exist: " .. frameName)
+                return
+            end
+            local protectionStatus = GetFrameProtectionStatus(_G[frameName])
+            if protectionStatus then
+                print("|cff00c8ffFAT:|r Error: Frame is " .. protectionStatus .. " and cannot be managed: " .. frameName)
+                return
+            end
             g.frames = g.frames or {}
             for _, v in ipairs(g.frames) do
                 if v == frameName then return end
