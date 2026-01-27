@@ -1891,6 +1891,7 @@ RefreshUI()
         if inCombat then
             if UI.frameWidget and UI.frameWidget.frame:IsShown() then
                 UI.reopenAfterCombat = true
+                print("|cff00c8ffFAT:|r Config closed due to combat. It will reopen when combat ends.")
                 UI.frameWidget.frame:Hide()
             end
             return
