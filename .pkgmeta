@@ -5,7 +5,8 @@ ignore:
   - CHANGELOG.md
   - LICENSE
   - .gitignore
-  # GitHub workflow/config files are not needed in addon packages.
-  - .github
-  - .vscode
   - .editorconfig
+
+  # GitHub / editor metadata
+  - .github/**
+  - .vscode/**
