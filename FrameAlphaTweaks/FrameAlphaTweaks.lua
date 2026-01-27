@@ -1514,14 +1514,12 @@ end
         infoBtn:SetText("Info")
         infoBtn:SetWidth(60)
         addRow:AddChild(infoBtn)
-        if infoBtn.frame then
-            if infoBtn.frame.HookScript then
-                infoBtn.frame:HookScript("OnEnter", function()
-		ShowTooltip(infoBtn.frame, "Shift+LMB to move items up.\n\nShift+RMB to move items down.\n\nMMB to move a frame to another group.\n\nType /fstack and hover over frames to find frame names. Enter frame name into box and click 'Add' to add to current group. Frame names are case sensitive.")
-			end)
-				infoBtn.frame:HookScript("OnLeave", HideTooltip)
-			end
-        end
+        infoBtn:SetCallback("OnEnter", function(widget)
+            ShowTooltip(widget.frame, "Shift+LMB to move items up.\n\nShift+RMB to move items down.\n\nMMB to move a frame to another group.\n\nType /fstack and hover over frames to find frame names. Enter frame name into box and click 'Add' to add to current group. Frame names are case sensitive.")
+        end)
+        infoBtn:SetCallback("OnLeave", function()
+            HideTooltip()
+        end)
 
         local frameEdit = AceGUI:Create("EditBox")
         frameEdit:SetLabel("")
