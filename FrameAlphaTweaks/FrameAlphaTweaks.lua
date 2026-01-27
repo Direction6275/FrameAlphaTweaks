@@ -1239,6 +1239,17 @@ end
 
     NS.RefreshUI = RefreshUI
 
+    local function HasOtherEscWindows(currentFrame)
+        if not UISpecialFrames then return false end
+        for _, frameName in ipairs(UISpecialFrames) do
+            local frame = _G[frameName]
+            if frame and frame ~= currentFrame and frame:IsShown() then
+                return true
+            end
+        end
+        return false
+    end
+
     local function BuildConfigWindow()
         local root, charKey, profName, prof = GetRoot()
         if UI.frameWidget then return end
@@ -1251,7 +1262,20 @@ end
         f:SetHeight(680)
         f:SetLayout("Flow")
         f:EnableResize(false)
-        if f.frame then f.frame:SetFrameStrata("MEDIUM"); f.frame:SetFrameLevel(10) end
+        if f.frame then
+            f.frame:SetFrameStrata("MEDIUM")
+            f.frame:SetFrameLevel(10)
+            f.frame:EnableKeyboard(true)
+            f.frame:SetPropagateKeyboardInput(false)
+            f.frame:SetScript("OnKeyDown", function(frame, key)
+                if key == "ESCAPE" then
+                    frame.obj:Hide()
+                    if not HasOtherEscWindows(frame) and ToggleGameMenu then
+                        ToggleGameMenu()
+                    end
+                end
+            end)
+        end
 
         f:SetCallback("OnClose", function(widget)
             -- Close any auxiliary windows
