@@ -11,6 +11,7 @@ local InCombatLockdown = InCombatLockdown
 local GetTime = GetTime
 local print = print
 local GameTooltip = GameTooltip
+local securecallfunction = securecallfunction
 
 -- 2. Defaults & Data Structure
 FrameAlphaTweaksDB = FrameAlphaTweaksDB or {}
@@ -394,6 +395,7 @@ local function RebuildEntries()
                         name = name,
                         ref = nil,
                         lastAlpha = nil,
+                        skip = false,
                         hoverExpire = 0,
                         targetBase = group.alpha or 1.0,
                         combat = (group.combat == nil and true) or group.combat,
@@ -428,12 +430,29 @@ end
 
 NS.RebuildEntries = RebuildEntries
 
+local function SafeCall(func, ...)
+    if securecallfunction then
+        return true, securecallfunction(func, ...)
+    end
+    return pcall(func, ...)
+end
+
+local function IsUnitStatusBar(frame)
+    return frame
+        and frame.GetObjectType
+        and frame:GetObjectType() == "StatusBar"
+        and (frame.unit or frame.unitFrame)
+end
+
 local function ForceSetAlpha(entry, alpha)
     if not entry or not entry.ref then return end
     local f = entry.ref
-    if f.SetIgnoreParentAlpha then pcall(f.SetIgnoreParentAlpha, f, true) end
+    if entry.skip or (f.IsForbidden and f:IsForbidden()) then return end
+    if f.SetIgnoreParentAlpha and not IsUnitStatusBar(f) then
+        SafeCall(f.SetIgnoreParentAlpha, f, true)
+    end
     if entry.lastAlpha ~= alpha then
-        pcall(f.SetAlpha, f, alpha)
+        SafeCall(f.SetAlpha, f, alpha)
         entry.lastAlpha = alpha
     end
 end
@@ -444,7 +463,7 @@ local function UpdateFadedAlpha(entry, desired, now)
 
     -- initialize current alpha from the frame the first time we see it
     if entry.currentAlpha == nil then
-        local ok, a = pcall(entry.ref.GetAlpha, entry.ref)
+        local ok, a = SafeCall(entry.ref.GetAlpha, entry.ref)
         entry.currentAlpha = (ok and type(a) == "number" and a) or 1.0
         entry.desiredAlpha = entry.currentAlpha
         entry.fadeDuration = 0
@@ -492,8 +511,17 @@ local function UpdateFadedAlpha(entry, desired, now)
 end
 
 local function TryResolve(entry)
+    if entry.skip then return false end
     local f = _G[entry.name]
     if f then
+        if f.IsForbidden and f:IsForbidden() then
+            entry.skip = true
+            return false
+        end
+        if IsUnitStatusBar(f) then
+            entry.skip = true
+            return false
+        end
         entry.ref = f
         return true
     end
@@ -514,6 +542,7 @@ end
 
 local function ApplyAlpha(entry, now, inCombat, hasTarget)
     if not entry.ref then return end
+    if entry.skip then return end
 
     local target, forceFull = 1, false
     if cfg.enabled then
