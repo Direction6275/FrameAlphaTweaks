@@ -660,6 +660,9 @@ else
         if UI.cbLinkedMouseover then
             UI.cbLinkedMouseover:SetValue(g.groupMouseover and true or false)
         end
+        if UI.cbFadeParent then
+            UI.cbFadeParent:SetValue(g.useFadeParent and true or false)
+        end
 
         if UI.fadeDelay then UI.fadeDelay:SetValue(g.mouseoverDelay or 0) end
         if UI.fadeIn then UI.fadeIn:SetValue(g.fadeInDuration or 0.1) end
@@ -1257,6 +1260,24 @@ else
             RefreshUI()
         end)
         settingsBox:AddChild(UI.cbLinkedMouseover)
+
+        UI.cbFadeParent = AceGUI:Create("CheckBox")
+        UI.cbFadeParent:SetLabel("Use Fade Parent (safer for secure frames)")
+        UI.cbFadeParent:SetFullWidth(true)
+        UI.cbFadeParent:SetCallback("OnValueChanged", function(_, _, val)
+            EnsureSelectedGroup()
+            local g = cfg.groups[UI.selectedGroup]
+            g.useFadeParent = val and true or false
+            RebuildEntries()
+            RefreshUI()
+        end)
+        UI.cbFadeParent:SetCallback("OnEnter", function(widget)
+            ShowTooltip(widget.frame, "Fades the group by adjusting alpha on a shared parent container; frames are parented to it out of combat. Reduces taint risk, but group fades as a unit.")
+        end)
+        UI.cbFadeParent:SetCallback("OnLeave", function()
+            HideTooltip()
+        end)
+        settingsBox:AddChild(UI.cbFadeParent)
 
         UI.fadeDelay = AceGUI:Create("Slider")
         UI.fadeDelay:SetLabel("Fade Delay (seconds)")
