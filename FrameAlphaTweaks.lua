@@ -434,7 +434,7 @@ local function RebuildEntries()
         if e and e.name and not stillUsed[e.name] then
             local f = e.ref or _G[e.name]
             if f and f.SetAlpha then
-                if not IsFrameForbidden(f) and not (InCombatLockdown() and IsFrameProtected(f)) then
+                if not IsFrameForbidden(f) and not IsFrameProtected(f) then
                     pcall(f.SetAlpha, f, 1)
                 end
             end
@@ -466,10 +466,8 @@ local function ForceSetAlpha(entry, alpha)
     if not entry or not entry.ref then return end
     entry.isForbidden = IsFrameForbidden(entry.ref)
     if entry.isForbidden then return end
-    if InCombatLockdown() then
-        entry.isProtected = IsFrameProtected(entry.ref)
-        if entry.isProtected then return end
-    end
+    entry.isProtected = IsFrameProtected(entry.ref)
+    if entry.isProtected then return end
     local f = entry.ref
     if f.SetIgnoreParentAlpha then pcall(f.SetIgnoreParentAlpha, f, true) end
     if entry.lastAlpha ~= alpha then
@@ -558,11 +556,9 @@ local function ApplyAlpha(entry, now, inCombat, hasTarget)
     if not entry.ref then return end
     entry.isForbidden = IsFrameForbidden(entry.ref)
     if entry.isForbidden then return end
+    entry.isProtected = IsFrameProtected(entry.ref)
+    if entry.isProtected then return end
     if entry.parentGroup and entry.parentGroup.isSecureGroup and inCombat then return end
-    if inCombat then
-        entry.isProtected = IsFrameProtected(entry.ref)
-        if entry.isProtected then return end
-    end
 
     local target, forceFull = 1, false
     if cfg.enabled then
