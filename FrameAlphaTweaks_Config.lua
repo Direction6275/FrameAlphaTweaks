@@ -319,18 +319,43 @@ else
     end
 
     -- Frame move helper (middle click on a frame row)
-    local function EnsureMoveDropDown()
-        if UI.moveDropDown and UI.moveDropDown.IsObjectType and UI.moveDropDown:IsObjectType("Frame") then
+    -- Custom popup menu to avoid taint from UIDropDownMenuTemplate
+    local function EnsureMovePopup()
+        if UI.movePopup and UI.movePopup.IsObjectType and UI.movePopup:IsObjectType("Frame") then
             return
         end
-        -- Use a dropdown menu (more reliable than AceGUI popups for click handling)
-        UI.moveDropDown = CreateFrame("Frame", "FAT_MoveDropDown", UIParent, "UIDropDownMenuTemplate")
-        UI.moveDropDown:Hide()
+        local popup = CreateFrame("Frame", nil, UIParent, "BackdropTemplate")
+        popup:SetFrameStrata("FULLSCREEN_DIALOG")
+        popup:SetClampedToScreen(true)
+        popup:Hide()
+        popup:SetBackdrop({
+            bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
+            edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+            tile = true, tileSize = 16, edgeSize = 16,
+            insets = { left = 4, right = 4, top = 4, bottom = 4 }
+        })
+        popup:SetBackdropColor(0.1, 0.1, 0.1, 0.95)
+        popup:SetBackdropBorderColor(0.6, 0.6, 0.6, 1)
+        popup.buttons = {}
+
+        -- Close when clicking outside
+        popup:SetScript("OnShow", function(self)
+            self:SetScript("OnUpdate", function(s)
+                if not MouseIsOver(s) and IsMouseButtonDown("LeftButton") then
+                    s:Hide()
+                end
+            end)
+        end)
+        popup:SetScript("OnHide", function(self)
+            self:SetScript("OnUpdate", nil)
+        end)
+
+        UI.movePopup = popup
     end
 
     local function CloseMoveFrameWindow()
-        if CloseDropDownMenus then
-            CloseDropDownMenus()
+        if UI.movePopup then
+            UI.movePopup:Hide()
         end
     end
 
@@ -381,21 +406,30 @@ else
 
     local function OpenMoveFrameWindow(frameName, anchorFrame)
         if not frameName then return end
-        EnsureMoveDropDown()
+        EnsureMovePopup()
 
+        local popup = UI.movePopup
         local current = UI.selectedGroup or 1
-        local menu = {}
 
-        menu[#menu + 1] = { text = "Move Frame", isTitle = true, notCheckable = true }
-        menu[#menu + 1] = { text = frameName, isTitle = true, notCheckable = true }
-        menu[#menu + 1] = { text = " ", notCheckable = true, disabled = true }
+        -- Clear existing buttons
+        for _, btn in ipairs(popup.buttons) do
+            btn:Hide()
+            btn:SetParent(nil)
+        end
+        wipe(popup.buttons)
 
+        -- Build menu items
+        local items = {}
+        items[#items + 1] = { text = "Move Frame", isTitle = true }
+        items[#items + 1] = { text = frameName, isTitle = true, highlight = true }
+
+        local hasTargets = false
         for idx, grp in ipairs(cfg.groups or {}) do
             if idx ~= current then
+                hasTargets = true
                 local gname = grp.name or ("Group " .. idx)
-                menu[#menu + 1] = {
+                items[#items + 1] = {
                     text = gname,
-                    notCheckable = true,
                     func = function()
                         CloseMoveFrameWindow()
                         MoveFrameToGroup(frameName, idx, current)
@@ -404,23 +438,58 @@ else
             end
         end
 
-        if #menu <= 3 then
-            menu[#menu + 1] = { text = "(No other groups)", notCheckable = true, disabled = true }
+        if not hasTargets then
+            items[#items + 1] = { text = "(No other groups)", disabled = true }
         end
 
-        if EasyMenu then
-            EasyMenu(menu, UI.moveDropDown, anchorFrame or "cursor", 0, 0, "MENU", 2)
-        else
-            UIDropDownMenu_Initialize(UI.moveDropDown, function(self, level)
-                if level ~= 1 then return end
-                for _, item in ipairs(menu) do
-                    local info = UIDropDownMenu_CreateInfo()
-                    for k, v in pairs(item) do info[k] = v end
-                    UIDropDownMenu_AddButton(info, level)
-                end
-            end, "MENU")
-            ToggleDropDownMenu(1, nil, UI.moveDropDown, anchorFrame or "cursor", 0, 0)
+        -- Create buttons
+        local BUTTON_HEIGHT = 20
+        local BUTTON_WIDTH = 180
+        local PADDING = 8
+        local yOffset = -PADDING
+
+        for i, item in ipairs(items) do
+            local btn = CreateFrame("Button", nil, popup)
+            btn:SetSize(BUTTON_WIDTH, BUTTON_HEIGHT)
+            btn:SetPoint("TOPLEFT", popup, "TOPLEFT", PADDING, yOffset)
+
+            local text = btn:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+            text:SetPoint("LEFT", 8, 0)
+            text:SetPoint("RIGHT", -8, 0)
+            text:SetJustifyH("LEFT")
+            text:SetText(item.text)
+
+            if item.isTitle then
+                text:SetFontObject(item.highlight and "GameFontHighlightSmall" or "GameFontNormalSmall")
+                btn:Disable()
+            elseif item.disabled then
+                text:SetTextColor(0.5, 0.5, 0.5)
+                btn:Disable()
+            else
+                text:SetTextColor(1, 1, 1)
+                btn:SetHighlightTexture("Interface\\QuestFrame\\UI-QuestTitleHighlight", "ADD")
+                btn:SetScript("OnClick", item.func)
+            end
+
+            popup.buttons[#popup.buttons + 1] = btn
+            yOffset = yOffset - BUTTON_HEIGHT
         end
+
+        -- Size and position popup
+        popup:SetSize(BUTTON_WIDTH + PADDING * 2, (#items * BUTTON_HEIGHT) + PADDING * 2)
+
+        if anchorFrame and anchorFrame.GetCenter then
+            local x, y = anchorFrame:GetCenter()
+            popup:ClearAllPoints()
+            popup:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", x, y)
+        else
+            local x, y = GetCursorPosition()
+            local scale = UIParent:GetEffectiveScale()
+            popup:ClearAllPoints()
+            popup:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", x / scale, y / scale)
+        end
+
+        popup:Show()
     end
 
     local function FindIndexFromCursor(rowFrames)
@@ -687,20 +756,9 @@ else
 if f.frame then
     f.frame:SetFrameStrata("MEDIUM")
     f.frame:SetFrameLevel(10)
-
-    -- Close on ESC without touching UISpecialFrames or creating globals (avoids common taint vectors)
-    f.frame:EnableKeyboard(true)
-    f.frame:SetPropagateKeyboardInput(true)
-    f.frame:SetScript("OnKeyDown", function(self, key)
-        if key == "ESCAPE" then
-            self:Hide()
-            self:SetPropagateKeyboardInput(false)
-        end
-    end)
-    f.frame:HookScript("OnHide", function(self)
-        -- Ensure we don't block ESC elsewhere after closing
-        self:SetPropagateKeyboardInput(true)
-    end)
+    -- ESC-to-close is handled by AceGUI's Frame widget natively.
+    -- We avoid SetPropagateKeyboardInput and HookScript to prevent taint
+    -- issues with Blizzard panels in WoW 12.0.
 end
 
         f:SetCallback("OnClose", function(widget)
@@ -1360,32 +1418,10 @@ end
     NS.HandleCombatState = HandleCombatState
 end
 
--- Optional: keep a tiny entry in Blizzard settings that just opens the standalone window.
+-- Settings API integration disabled to prevent taint errors in WoW 12.0
+-- The Settings.RegisterCanvasLayoutCategory and UIPanelButtonTemplate can cause
+-- taint when Blizzard UI panels (Talents, Character, etc.) are opened.
+-- Users can access configuration via /fat or the minimap button.
 NS.RegisterBlizzardOptionsStub = function()
-    if not Settings or not Settings.RegisterAddOnCategory then return end
-    local panel = CreateFrame("Frame", nil, nil)
-    panel.name = "Frame Alpha Tweaks"
-    local category = Settings.RegisterCanvasLayoutCategory(panel, panel.name)
-    Settings.RegisterAddOnCategory(category)
-
-    panel:SetScript("OnShow", function(self)
-        if self._built then return end
-        self._built = true
-        local t = self:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
-        t:SetPoint("TOPLEFT", 16, -16)
-        t:SetText("Frame Alpha Tweaks")
-
-        local d = self:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
-        d:SetPoint("TOPLEFT", 16, -46)
-        d:SetJustifyH("LEFT")
-        d:SetText("This addon uses a standalone configuration window.\nOpen it with /fat, the minimap button, or the button below.")
-
-        local b = CreateFrame("Button", nil, self, "UIPanelButtonTemplate")
-        b:SetSize(200, 24)
-        b:SetPoint("TOPLEFT", 16, -90)
-        b:SetText("Open Config Window")
-        b:SetScript("OnClick", function()
-            if NS.ToggleConfig then NS.ToggleConfig() end
-        end)
-    end)
+    -- Intentionally disabled - see comment above
 end
