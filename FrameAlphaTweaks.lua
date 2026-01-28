@@ -375,7 +375,7 @@ NS.GetConfig = GetConfig
 
 local function GetFadeParent(groupIndex)
     if not fadeParents[groupIndex] then
-        fadeParents[groupIndex] = CreateFrame("Frame", "FAT_FadeParent" .. groupIndex, UIParent, "SecureHandlerStateTemplate")
+        fadeParents[groupIndex] = CreateFrame("Frame", "FAT_FadeParent" .. groupIndex, UIParent)
     end
     return fadeParents[groupIndex]
 end
