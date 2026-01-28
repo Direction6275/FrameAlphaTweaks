@@ -409,6 +409,7 @@ local function RebuildEntries()
                         fadeStartTime = 0,
                         fadeDuration = 0,
                         parentGroup = group,
+                        isProtected = nil,
                     }
                 end
             end
@@ -491,10 +492,24 @@ local function UpdateFadedAlpha(entry, desired, now)
     ForceSetAlpha(entry, entry.currentAlpha)
 end
 
+local function IsFrameProtected(frame)
+    if not frame then return false end
+    if frame.IsProtected then
+        local ok, protected = pcall(frame.IsProtected, frame)
+        if ok and protected then return true end
+    end
+    if type(issecurevariable) == "function" then
+        local ok, protected = pcall(issecurevariable, frame, "Show")
+        if ok and protected then return true end
+    end
+    return false
+end
+
 local function TryResolve(entry)
     local f = _G[entry.name]
     if f then
         entry.ref = f
+        entry.isProtected = IsFrameProtected(f)
         return true
     end
     return false
@@ -514,6 +529,7 @@ end
 
 local function ApplyAlpha(entry, now, inCombat, hasTarget)
     if not entry.ref then return end
+    if inCombat and entry.isProtected then return end
 
     local target, forceFull = 1, false
     if cfg.enabled then
