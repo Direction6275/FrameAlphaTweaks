@@ -434,7 +434,7 @@ local function RebuildEntries()
         if e and e.name and not stillUsed[e.name] then
             local f = e.ref or _G[e.name]
             if f and f.SetAlpha then
-                if not IsFrameForbidden(f) and not IsFrameProtected(f) then
+                if not IsFrameRestricted(f) then
                     pcall(f.SetAlpha, f, 1)
                 end
             end
@@ -462,12 +462,24 @@ local function IsFrameForbidden(frame)
     return false
 end
 
+local function IsFrameRestricted(frame)
+    if not frame then return false end
+    local current = frame
+    local depth = 0
+    while current and depth < 20 do
+        if IsFrameForbidden(current) or IsFrameProtected(current) then
+            return true
+        end
+        current = current.GetParent and current:GetParent()
+        depth = depth + 1
+    end
+    return false
+end
+
 local function ForceSetAlpha(entry, alpha)
     if not entry or not entry.ref then return end
-    entry.isForbidden = IsFrameForbidden(entry.ref)
-    if entry.isForbidden then return end
-    entry.isProtected = IsFrameProtected(entry.ref)
-    if entry.isProtected then return end
+    entry.isRestricted = IsFrameRestricted(entry.ref)
+    if entry.isRestricted then return end
     local f = entry.ref
     if f.SetIgnoreParentAlpha then pcall(f.SetIgnoreParentAlpha, f, true) end
     if entry.lastAlpha ~= alpha then
@@ -533,8 +545,7 @@ local function TryResolve(entry)
     local f = _G[entry.name]
     if f then
         entry.ref = f
-        entry.isProtected = IsFrameProtected(f)
-        entry.isForbidden = IsFrameForbidden(f)
+        entry.isRestricted = IsFrameRestricted(f)
         return true
     end
     return false
@@ -554,10 +565,8 @@ end
 
 local function ApplyAlpha(entry, now, inCombat, hasTarget)
     if not entry.ref then return end
-    entry.isForbidden = IsFrameForbidden(entry.ref)
-    if entry.isForbidden then return end
-    entry.isProtected = IsFrameProtected(entry.ref)
-    if entry.isProtected then return end
+    entry.isRestricted = IsFrameRestricted(entry.ref)
+    if entry.isRestricted then return end
     if entry.parentGroup and entry.parentGroup.isSecureGroup and inCombat then return end
 
     local target, forceFull = 1, false

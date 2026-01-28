@@ -323,6 +323,20 @@ else
         return false
     end
 
+    local function IsFrameRestricted(frame)
+        if not frame then return false end
+        local current = frame
+        local depth = 0
+        while current and depth < 20 do
+            if IsFrameForbidden(current) or IsFrameProtected(current) then
+                return true
+            end
+            current = current.GetParent and current:GetParent()
+            depth = depth + 1
+        end
+        return false
+    end
+
     local function FindSecureGroupIndex()
         if not cfg or not cfg.groups then return nil end
         for idx, g in ipairs(cfg.groups) do
@@ -358,7 +372,7 @@ else
     end
 
     local function ShouldQuarantineFrame(frame)
-        return IsFrameForbidden(frame) or IsFrameProtected(frame)
+        return IsFrameRestricted(frame)
     end
 
     local WHITE_TOOLTIP_COLOR = (CreateColor and CreateColor(1, 1, 1)) or nil
