@@ -440,8 +440,19 @@ local function IsFrameProtected(frame)
     return false
 end
 
+local function IsFrameForbidden(frame)
+    if not frame then return false end
+    if frame.IsForbidden then
+        local ok, forbidden = pcall(frame.IsForbidden, frame)
+        if ok and forbidden then return true end
+    end
+    return false
+end
+
 local function ForceSetAlpha(entry, alpha)
     if not entry or not entry.ref then return end
+    entry.isForbidden = IsFrameForbidden(entry.ref)
+    if entry.isForbidden then return end
     if InCombatLockdown() then
         entry.isProtected = IsFrameProtected(entry.ref)
         if entry.isProtected then return end
@@ -512,6 +523,7 @@ local function TryResolve(entry)
     if f then
         entry.ref = f
         entry.isProtected = IsFrameProtected(f)
+        entry.isForbidden = IsFrameForbidden(f)
         return true
     end
     return false
@@ -531,6 +543,8 @@ end
 
 local function ApplyAlpha(entry, now, inCombat, hasTarget)
     if not entry.ref then return end
+    entry.isForbidden = IsFrameForbidden(entry.ref)
+    if entry.isForbidden then return end
     if inCombat then
         entry.isProtected = IsFrameProtected(entry.ref)
         if entry.isProtected then return end
