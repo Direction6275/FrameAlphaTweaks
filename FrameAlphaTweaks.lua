@@ -26,6 +26,7 @@ NS.defaults = {
             target = true, 
             mouseover = true, 
             groupMouseover = false, 
+            useFadeParent = false,
             mouseoverDelay = 1.0, -- New Default: 1 second delay
             fadeInDuration = 0.2, -- Fade-in duration (seconds)
             fadeOutDuration = 0.2, -- Fade-out duration (seconds)
@@ -355,6 +356,10 @@ NS.EnsureProfileSystem = EnsureProfileSystem
 
 local cfg
 local entries = {} -- Master list
+local fadeParents = {}
+local originalParents = setmetatable({}, { __mode = "k" })
+local pendingReparents = { attach = {}, restore = {} }
+local warnedFrames = {}
 
 local function SetConfig(newCfg)
     cfg = newCfg
@@ -367,6 +372,98 @@ end
 
 NS.SetConfig = SetConfig
 NS.GetConfig = GetConfig
+
+local function GetFadeParent(groupIndex)
+    if not fadeParents[groupIndex] then
+        fadeParents[groupIndex] = CreateFrame("Frame", "FAT_FadeParent" .. groupIndex, UIParent)
+    end
+    return fadeParents[groupIndex]
+end
+
+local function CanTouchFrame(f)
+    if not f then return false end
+    if f.IsForbidden and f:IsForbidden() then return false end
+    return true
+end
+
+local function WarnFrameOnce(entry, message)
+    if not entry then return end
+    local key = entry.name or (entry.ref and tostring(entry.ref))
+    if not key or warnedFrames[key] then return end
+    warnedFrames[key] = true
+    print(message)
+end
+
+local function AttachFrameToGroupFadeParent(entry, groupIndex)
+    if not entry then return false end
+    local f = entry.ref or (entry.name and _G[entry.name])
+    if not f then return false end
+    entry.ref = f
+
+    if not CanTouchFrame(f) then
+        entry.fallbackToDirect = true
+        entry.usesFadeParent = false
+        WarnFrameOnce(entry, "|cff00c8ffFAT:|r Skipping forbidden frame " .. (entry.name or tostring(f)) .. " (direct alpha only).")
+        return false
+    end
+
+    if f.IsProtected and f:IsProtected() and InCombatLockdown() then
+        pendingReparents.attach[entry] = true
+        return false
+    end
+    pendingReparents.attach[entry] = nil
+
+    originalParents[f] = originalParents[f] or f:GetParent()
+    local fadeParent = GetFadeParent(groupIndex)
+    if f.GetParent and f:GetParent() == fadeParent then
+        if f.SetIgnoreParentAlpha then pcall(f.SetIgnoreParentAlpha, f, false) end
+        entry.usesFadeParent = true
+        entry.groupIndex = groupIndex
+        entry.fallbackToDirect = false
+        return true
+    end
+
+    local ok = pcall(f.SetParent, f, fadeParent)
+    if not ok then
+        entry.fallbackToDirect = true
+        entry.usesFadeParent = false
+        WarnFrameOnce(entry, "|cff00c8ffFAT:|r Failed to attach " .. (entry.name or tostring(f)) .. " to fade parent (direct alpha only).")
+        return false
+    end
+
+    if f.SetIgnoreParentAlpha then pcall(f.SetIgnoreParentAlpha, f, false) end
+    entry.usesFadeParent = true
+    entry.groupIndex = groupIndex
+    entry.fallbackToDirect = false
+    return true
+end
+
+local function RestoreFrameParent(entry)
+    if not entry then return false end
+    local f = entry.ref or (entry.name and _G[entry.name])
+    if not f then return false end
+    entry.ref = f
+
+    local original = originalParents[f]
+    if not original then return false end
+
+    if f.IsProtected and f:IsProtected() and InCombatLockdown() then
+        pendingReparents.restore[entry] = true
+        return false
+    end
+    pendingReparents.restore[entry] = nil
+
+    local ok = pcall(f.SetParent, f, original)
+    if not ok then
+        WarnFrameOnce(entry, "|cff00c8ffFAT:|r Failed to restore parent for " .. (entry.name or tostring(f)) .. ".")
+        return false
+    end
+
+    if f.SetIgnoreParentAlpha then pcall(f.SetIgnoreParentAlpha, f, true) end
+    originalParents[f] = nil
+    entry.usesFadeParent = false
+    return true
+end
 
 -- 3. Core Logic
 local function RebuildEntries()
@@ -381,8 +478,9 @@ local function RebuildEntries()
 
     local seen = {}        -- prevents duplicates in new entries
     local stillUsed = {}   -- tracks which frame names remain in config
+    local newByName = {}
 
-    for _, group in ipairs(cfg.groups) do
+    for groupIndex, group in ipairs(cfg.groups) do
         local frames = group.frames
         if frames then
             for _, name in ipairs(frames) do
@@ -390,7 +488,7 @@ local function RebuildEntries()
                     seen[name] = true
                     stillUsed[name] = true
 
-                    entries[#entries+1] = {
+                    local entry = {
                         name = name,
                         ref = nil,
                         lastAlpha = nil,
@@ -400,6 +498,7 @@ local function RebuildEntries()
                         target = (group.target == nil and true) or group.target,
                         mouseover = (group.mouseover == nil and true) or group.mouseover,
                         groupMouseover = group.groupMouseover or false,
+                        useFadeParent = group.useFadeParent or false,
                         mouseoverDelay = group.mouseoverDelay or 1.0,
                         fadeInDuration = group.fadeInDuration or 0.0,
                         fadeOutDuration = group.fadeOutDuration or 0.0,
@@ -409,7 +508,10 @@ local function RebuildEntries()
                         fadeStartTime = 0,
                         fadeDuration = 0,
                         parentGroup = group,
+                        groupIndex = groupIndex,
                     }
+                    entries[#entries+1] = entry
+                    newByName[name] = entry
                 end
             end
         end
@@ -418,9 +520,17 @@ local function RebuildEntries()
     -- Restore alpha for frames that are no longer in any group
     for _, e in ipairs(old) do
         if e and e.name and not stillUsed[e.name] then
+            if e.usesFadeParent then
+                RestoreFrameParent(e)
+            end
             local f = e.ref or _G[e.name]
             if f and f.SetAlpha then
                 pcall(f.SetAlpha, f, 1)
+            end
+        elseif e and e.name and e.usesFadeParent then
+            local newEntry = newByName[e.name]
+            if not newEntry or not newEntry.useFadeParent then
+                RestoreFrameParent(e)
             end
         end
     end
@@ -430,6 +540,7 @@ NS.RebuildEntries = RebuildEntries
 
 local function ForceSetAlpha(entry, alpha)
     if not entry or not entry.ref then return end
+    if entry.usesFadeParent then return end
     local f = entry.ref
     if f.SetIgnoreParentAlpha then pcall(f.SetIgnoreParentAlpha, f, true) end
     if entry.lastAlpha ~= alpha then
@@ -491,6 +602,77 @@ local function UpdateFadedAlpha(entry, desired, now)
     ForceSetAlpha(entry, entry.currentAlpha)
 end
 
+local function GetGroupRuntime(group)
+    if not group.runtime then
+        group.runtime = {
+            currentAlpha = nil,
+            desiredAlpha = nil,
+            fadeStartAlpha = nil,
+            fadeStartTime = 0,
+            fadeDuration = 0,
+            lastAppliedAlpha = nil,
+            hoverExpire = 0,
+        }
+    end
+    return group.runtime
+end
+
+local function UpdateGroupFadedAlpha(group, groupIndex, desired, now)
+    if not group then return end
+    now = now or GetTime()
+
+    local runtime = GetGroupRuntime(group)
+    local fadeParent = GetFadeParent(groupIndex)
+
+    if runtime.currentAlpha == nil then
+        local ok, a = pcall(fadeParent.GetAlpha, fadeParent)
+        runtime.currentAlpha = (ok and type(a) == "number" and a) or 1.0
+        runtime.desiredAlpha = runtime.currentAlpha
+        runtime.fadeDuration = 0
+    end
+
+    if runtime.desiredAlpha ~= desired then
+        runtime.fadeStartAlpha = runtime.currentAlpha
+        runtime.desiredAlpha = desired
+        runtime.fadeStartTime = now
+
+        local dur = 0
+        if desired > runtime.currentAlpha then
+            dur = group.fadeInDuration or 0
+        else
+            dur = group.fadeOutDuration or 0
+        end
+        runtime.fadeDuration = dur or 0
+
+        if runtime.fadeDuration <= 0 then
+            runtime.currentAlpha = desired
+            runtime.fadeDuration = 0
+        end
+    end
+
+    if runtime.fadeDuration and runtime.fadeDuration > 0 then
+        local t = (now - (runtime.fadeStartTime or now)) / runtime.fadeDuration
+        if t >= 1 then
+            runtime.currentAlpha = runtime.desiredAlpha
+            runtime.fadeDuration = 0
+        elseif t < 0 then
+            t = 0
+        end
+
+        if runtime.fadeDuration > 0 then
+            runtime.currentAlpha = (runtime.fadeStartAlpha or runtime.currentAlpha)
+                + ((runtime.desiredAlpha - (runtime.fadeStartAlpha or runtime.currentAlpha)) * t)
+        end
+    else
+        runtime.currentAlpha = desired
+    end
+
+    if runtime.lastAppliedAlpha ~= runtime.currentAlpha then
+        pcall(fadeParent.SetAlpha, fadeParent, runtime.currentAlpha)
+        runtime.lastAppliedAlpha = runtime.currentAlpha
+    end
+end
+
 local function TryResolve(entry)
     local f = _G[entry.name]
     if f then
@@ -525,7 +707,7 @@ local function ApplyAlpha(entry, now, inCombat, hasTarget)
             now = now or GetTime()
             local isHovering = false
 
-            if entry.groupMouseover and entry.parentGroup and IsAnyFrameInGroupHovered(entry.parentGroup) then
+            if entry.parentGroup and (entry.groupMouseover or entry.parentGroup.useFadeParent) and IsAnyFrameInGroupHovered(entry.parentGroup) then
                 isHovering = true
             elseif entry.mouseover and entry.ref.IsMouseOver and entry.ref:IsMouseOver() then
                 isHovering = true
@@ -547,10 +729,45 @@ local function ApplyAlpha(entry, now, inCombat, hasTarget)
     UpdateFadedAlpha(entry, target, now)
 end
 
+local function ApplyGroupAlpha(group, groupIndex, now, inCombat, hasTarget)
+    if not group then return end
+
+    local target, forceFull = 1, false
+    if cfg.enabled then
+        if group.combat and inCombat then
+            forceFull = true
+        elseif group.target and hasTarget then
+            forceFull = true
+        else
+            now = now or GetTime()
+            local runtime = GetGroupRuntime(group)
+            local isHovering = false
+
+            if (group.groupMouseover or group.useFadeParent) and IsAnyFrameInGroupHovered(group) then
+                isHovering = true
+            end
+
+            if isHovering then
+                forceFull = true
+                runtime.hoverExpire = now + (group.mouseoverDelay or 0)
+            elseif runtime.hoverExpire and now < runtime.hoverExpire then
+                forceFull = true
+            end
+        end
+
+        if not forceFull then
+            target = group.alpha or 0.2
+        end
+    end
+
+    UpdateGroupFadedAlpha(group, groupIndex, target, now)
+end
+
 -- 4. Main Loop
 local mainFrame = CreateFrame("Frame")
 local updateAccum = 0
 local UPDATE_INTERVAL = 1/30 -- ~30Hz is plenty smooth for fades
+local groupHasEntries = {}
 
 mainFrame:SetScript("OnUpdate", function(_, dt)
     if not cfg then return end
@@ -562,11 +779,39 @@ mainFrame:SetScript("OnUpdate", function(_, dt)
     local inCombat = InCombatLockdown()
     local hasTarget = UnitExists("target")
 
+    wipe(groupHasEntries)
     for _, e in ipairs(entries) do
         if not e.ref then TryResolve(e) end
-        if e.ref and e.ref:IsVisible() then
+        local g = e.parentGroup
+        if g and g.useFadeParent and not e.fallbackToDirect then
+            groupHasEntries[g] = true
+            if e.ref then
+                AttachFrameToGroupFadeParent(e, e.groupIndex)
+            end
+        elseif e.ref and e.ref:IsVisible() then
             ApplyAlpha(e, now, inCombat, hasTarget)
         end
+    end
+
+    for groupIndex, group in ipairs(cfg.groups) do
+        if group.useFadeParent and groupHasEntries[group] then
+            ApplyGroupAlpha(group, groupIndex, now, inCombat, hasTarget)
+        end
+    end
+end)
+
+mainFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
+mainFrame:SetScript("OnEvent", function(_, event)
+    if event ~= "PLAYER_REGEN_ENABLED" then return end
+    for entry in pairs(pendingReparents.attach) do
+        pendingReparents.attach[entry] = nil
+        if entry and entry.parentGroup and entry.parentGroup.useFadeParent and not entry.fallbackToDirect then
+            AttachFrameToGroupFadeParent(entry, entry.groupIndex)
+        end
+    end
+    for entry in pairs(pendingReparents.restore) do
+        pendingReparents.restore[entry] = nil
+        RestoreFrameParent(entry)
     end
 end)
 
@@ -600,6 +845,7 @@ local function ValidateGroups()
         if g.target == nil then g.target = true end
         if g.mouseover == nil then g.mouseover = true end
         if g.groupMouseover == nil then g.groupMouseover = false end
+        if g.useFadeParent == nil then g.useFadeParent = false end
         if g.mouseoverDelay == nil then g.mouseoverDelay = 1.0 end
         if g.fadeInDuration == nil then g.fadeInDuration = 0.2 end
         if g.fadeOutDuration == nil then g.fadeOutDuration = 0.2 end
@@ -608,7 +854,7 @@ local function ValidateGroups()
     end
     
     if #cfg.groups == 0 then
-        table.insert(cfg.groups, { name = "Group 1", alpha = 1.0, combat=true, target=true, mouseover=true, groupMouseover=false, mouseoverDelay=1.0, fadeInDuration=0.2, fadeOutDuration=0.2, frames = {} })
+        table.insert(cfg.groups, { name = "Group 1", alpha = 1.0, combat=true, target=true, mouseover=true, groupMouseover=false, useFadeParent=false, mouseoverDelay=1.0, fadeInDuration=0.2, fadeOutDuration=0.2, frames = {} })
     end
     
     if not cfg.activeGroupIndex or cfg.activeGroupIndex > #cfg.groups or cfg.activeGroupIndex < 1 then
