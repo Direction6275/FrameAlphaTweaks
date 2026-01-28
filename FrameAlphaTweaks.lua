@@ -498,10 +498,6 @@ local function IsFrameProtected(frame)
         local ok, protected = pcall(frame.IsProtected, frame)
         if ok and protected then return true end
     end
-    if type(issecurevariable) == "function" then
-        local ok, protected = pcall(issecurevariable, frame, "Show")
-        if ok and protected then return true end
-    end
     return false
 end
 
@@ -529,7 +525,12 @@ end
 
 local function ApplyAlpha(entry, now, inCombat, hasTarget)
     if not entry.ref then return end
-    if inCombat and entry.isProtected then return end
+    if inCombat then
+        if entry.isProtected == nil then
+            entry.isProtected = IsFrameProtected(entry.ref)
+        end
+        if entry.isProtected then return end
+    end
 
     local target, forceFull = 1, false
     if cfg.enabled then
