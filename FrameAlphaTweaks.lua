@@ -421,7 +421,9 @@ local function RebuildEntries()
         if e and e.name and not stillUsed[e.name] then
             local f = e.ref or _G[e.name]
             if f and f.SetAlpha then
-                pcall(f.SetAlpha, f, 1)
+                if not (InCombatLockdown() and IsFrameProtected(f)) then
+                    pcall(f.SetAlpha, f, 1)
+                end
             end
         end
     end
@@ -429,8 +431,21 @@ end
 
 NS.RebuildEntries = RebuildEntries
 
+local function IsFrameProtected(frame)
+    if not frame then return false end
+    if frame.IsProtected then
+        local ok, protected = pcall(frame.IsProtected, frame)
+        if ok and protected then return true end
+    end
+    return false
+end
+
 local function ForceSetAlpha(entry, alpha)
     if not entry or not entry.ref then return end
+    if InCombatLockdown() then
+        entry.isProtected = IsFrameProtected(entry.ref)
+        if entry.isProtected then return end
+    end
     local f = entry.ref
     if f.SetIgnoreParentAlpha then pcall(f.SetIgnoreParentAlpha, f, true) end
     if entry.lastAlpha ~= alpha then
@@ -492,15 +507,6 @@ local function UpdateFadedAlpha(entry, desired, now)
     ForceSetAlpha(entry, entry.currentAlpha)
 end
 
-local function IsFrameProtected(frame)
-    if not frame then return false end
-    if frame.IsProtected then
-        local ok, protected = pcall(frame.IsProtected, frame)
-        if ok and protected then return true end
-    end
-    return false
-end
-
 local function TryResolve(entry)
     local f = _G[entry.name]
     if f then
@@ -526,9 +532,7 @@ end
 local function ApplyAlpha(entry, now, inCombat, hasTarget)
     if not entry.ref then return end
     if inCombat then
-        if entry.isProtected == nil then
-            entry.isProtected = IsFrameProtected(entry.ref)
-        end
+        entry.isProtected = IsFrameProtected(entry.ref)
         if entry.isProtected then return end
     end
 
