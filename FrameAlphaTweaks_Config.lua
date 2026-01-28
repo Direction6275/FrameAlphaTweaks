@@ -683,23 +683,25 @@ else
         f:SetHeight(680)
         f:SetLayout("Flow")
         f:EnableResize(false)
-        if f.frame then
-            f.frame:SetFrameStrata("MEDIUM")
-            f.frame:SetFrameLevel(10)
-            local escName = "FrameAlphaTweaksConfig"
-            _G[escName] = f.frame
-            UISpecialFrames = UISpecialFrames or {}
-            local alreadyListed = false
-            for _, name in ipairs(UISpecialFrames) do
-                if name == escName then
-                    alreadyListed = true
-                    break
-                end
-            end
-            if not alreadyListed then
-                table.insert(UISpecialFrames, escName)
-            end
+
+if f.frame then
+    f.frame:SetFrameStrata("MEDIUM")
+    f.frame:SetFrameLevel(10)
+
+    -- Close on ESC without touching UISpecialFrames or creating globals (avoids common taint vectors)
+    f.frame:EnableKeyboard(true)
+    f.frame:SetPropagateKeyboardInput(true)
+    f.frame:SetScript("OnKeyDown", function(self, key)
+        if key == "ESCAPE" then
+            self:Hide()
+            self:SetPropagateKeyboardInput(false)
         end
+    end)
+    f.frame:HookScript("OnHide", function(self)
+        -- Ensure we don't block ESC elsewhere after closing
+        self:SetPropagateKeyboardInput(true)
+    end)
+end
 
         f:SetCallback("OnClose", function(widget)
             -- Close any auxiliary windows
