@@ -29,7 +29,20 @@ NS.defaults = {
             mouseoverDelay = 1.0, -- New Default: 1 second delay
             fadeInDuration = 0.2, -- Fade-in duration (seconds)
             fadeOutDuration = 0.2, -- Fade-out duration (seconds)
-            frames = {}}
+            frames = {}},
+        {
+            name = "Secure/Forbidden",
+            alpha = 1.0,
+            combat = false,
+            target = false,
+            mouseover = false,
+            groupMouseover = false,
+            mouseoverDelay = 0.0,
+            fadeInDuration = 0.0,
+            fadeOutDuration = 0.0,
+            isSecureGroup = true,
+            frames = {}
+        }
     }
 }
 
@@ -421,7 +434,7 @@ local function RebuildEntries()
         if e and e.name and not stillUsed[e.name] then
             local f = e.ref or _G[e.name]
             if f and f.SetAlpha then
-                if not (InCombatLockdown() and IsFrameProtected(f)) then
+                if not IsFrameForbidden(f) and not (InCombatLockdown() and IsFrameProtected(f)) then
                     pcall(f.SetAlpha, f, 1)
                 end
             end
@@ -545,6 +558,7 @@ local function ApplyAlpha(entry, now, inCombat, hasTarget)
     if not entry.ref then return end
     entry.isForbidden = IsFrameForbidden(entry.ref)
     if entry.isForbidden then return end
+    if entry.parentGroup and entry.parentGroup.isSecureGroup and inCombat then return end
     if inCombat then
         entry.isProtected = IsFrameProtected(entry.ref)
         if entry.isProtected then return end
@@ -608,6 +622,33 @@ end)
 -- 5. Data Migration & Validation
 local function ValidateGroups()
     if not cfg.groups then cfg.groups = {} end
+
+    local function EnsureSecureGroup()
+        local secureIndex
+        for idx, g in ipairs(cfg.groups) do
+            if g.isSecureGroup or g.name == "Secure/Forbidden" then
+                secureIndex = idx
+                g.isSecureGroup = true
+                break
+            end
+        end
+        if not secureIndex then
+            table.insert(cfg.groups, CopyDefaults(NS.defaults.groups[2], {}))
+            secureIndex = #cfg.groups
+        end
+        local secure = cfg.groups[secureIndex]
+        secure.name = "Secure/Forbidden"
+        secure.isSecureGroup = true
+        secure.alpha = 1.0
+        secure.combat = false
+        secure.target = false
+        secure.mouseover = false
+        secure.groupMouseover = false
+        secure.mouseoverDelay = 0.0
+        secure.fadeInDuration = 0.0
+        secure.fadeOutDuration = 0.0
+        secure.frames = secure.frames or {}
+    end
     
     -- Legacy Migration
     if FrameAlphaTweaksDB.frameNames then
@@ -641,6 +682,8 @@ local function ValidateGroups()
         -- Enforce binary mouseover mode (prefer linked/group mode if both were enabled)
         if g.groupMouseover then g.mouseover = false end
     end
+
+    EnsureSecureGroup()
     
     if #cfg.groups == 0 then
         table.insert(cfg.groups, { name = "Group 1", alpha = 1.0, combat=true, target=true, mouseover=true, groupMouseover=false, mouseoverDelay=1.0, fadeInDuration=0.2, fadeOutDuration=0.2, frames = {} })

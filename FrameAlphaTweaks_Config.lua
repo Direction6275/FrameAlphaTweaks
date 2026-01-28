@@ -293,6 +293,62 @@ else
         return g and (g.combat or g.target or g.mouseover or g.groupMouseover)
     end
 
+    local function IsFrameProtected(frame)
+        if not frame then return false end
+        if frame.IsProtected then
+            local ok, protected = pcall(frame.IsProtected, frame)
+            if ok and protected then return true end
+        end
+        return false
+    end
+
+    local function IsFrameForbidden(frame)
+        if not frame then return false end
+        if frame.IsForbidden then
+            local ok, forbidden = pcall(frame.IsForbidden, frame)
+            if ok and forbidden then return true end
+        end
+        return false
+    end
+
+    local function FindSecureGroupIndex()
+        if not cfg or not cfg.groups then return nil end
+        for idx, g in ipairs(cfg.groups) do
+            if g.isSecureGroup or g.name == "Secure/Forbidden" then
+                g.isSecureGroup = true
+                return idx
+            end
+        end
+        return nil
+    end
+
+    local function EnsureSecureGroup()
+        EnsureSelectedGroup()
+        local secureIndex = FindSecureGroupIndex()
+        if not secureIndex then
+            local new = CopyDefaults(NS.defaults.groups[2], { name = "Secure/Forbidden", frames = {}, isSecureGroup = true })
+            table.insert(cfg.groups, new)
+            secureIndex = #cfg.groups
+        end
+        local secure = cfg.groups[secureIndex]
+        secure.name = "Secure/Forbidden"
+        secure.isSecureGroup = true
+        secure.alpha = 1.0
+        secure.combat = false
+        secure.target = false
+        secure.mouseover = false
+        secure.groupMouseover = false
+        secure.mouseoverDelay = 0.0
+        secure.fadeInDuration = 0.0
+        secure.fadeOutDuration = 0.0
+        secure.frames = secure.frames or {}
+        return secureIndex
+    end
+
+    local function ShouldQuarantineFrame(frame)
+        return IsFrameForbidden(frame) or IsFrameProtected(frame)
+    end
+
     local WHITE_TOOLTIP_COLOR = (CreateColor and CreateColor(1, 1, 1)) or nil
     local function ShowTooltip(owner, text)
         if not owner or not text then return end
@@ -870,6 +926,10 @@ else
             EnsureSelectedGroup()
             local idx = UI.selectedGroup or 1
             local name = (cfg.groups[idx] and cfg.groups[idx].name) or ("Group " .. idx)
+            if cfg.groups[idx] and cfg.groups[idx].isSecureGroup then
+                print("|cff00c8ffFAT:|r The Secure/Forbidden group cannot be deleted.")
+                return
+            end
 
             -- Confirm delete
             NS._pendingDeleteGroup = idx
@@ -978,16 +1038,31 @@ else
                 return
             end
 
-            -- Prevent duplicates
-            for _, v in ipairs(g.frames) do
-                if v == name then
-                    frameEdit:SetText("")
-                    return
+            local function AddFrameToIndex(frameName, targetIndex)
+                local target = cfg.groups[targetIndex]
+                if not target then return end
+                target.frames = target.frames or {}
+                for _, group in ipairs(cfg.groups) do
+                    if group.frames then
+                        for i = #group.frames, 1, -1 do
+                            if group.frames[i] == frameName then
+                                table.remove(group.frames, i)
+                            end
+                        end
+                    end
                 end
+                for _, v in ipairs(target.frames) do
+                    if v == frameName then return end
+                end
+                table.insert(target.frames, frameName)
             end
 
-            -- Add frame safely
-            table.insert(g.frames, name)
+            local targetIndex = UI.selectedGroup
+            if ShouldQuarantineFrame(_G[name]) then
+                targetIndex = EnsureSecureGroup()
+            end
+
+            AddFrameToIndex(name, targetIndex)
 
             frameEdit:SetText("")
             RebuildEntries()
@@ -1002,12 +1077,26 @@ else
 
         local function AddFrameToGroup(frameName)
             EnsureSelectedGroup()
-            local g = cfg.groups[UI.selectedGroup]
-            g.frames = g.frames or {}
-            for _, v in ipairs(g.frames) do
+            local targetIndex = UI.selectedGroup
+            if _G[frameName] and ShouldQuarantineFrame(_G[frameName]) then
+                targetIndex = EnsureSecureGroup()
+            end
+            local target = cfg.groups[targetIndex]
+            if not target then return end
+            target.frames = target.frames or {}
+            for _, group in ipairs(cfg.groups) do
+                if group.frames then
+                    for i = #group.frames, 1, -1 do
+                        if group.frames[i] == frameName then
+                            table.remove(group.frames, i)
+                        end
+                    end
+                end
+            end
+            for _, v in ipairs(target.frames) do
                 if v == frameName then return end
             end
-            table.insert(g.frames, frameName)
+            table.insert(target.frames, frameName)
             RebuildEntries()
             RefreshUI()
         end
