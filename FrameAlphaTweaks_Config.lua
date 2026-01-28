@@ -20,223 +20,304 @@ local function SyncConfig()
     cfg = NS.GetConfig and NS.GetConfig() or cfg
 end
 
--- === Profile Popups ===
-StaticPopupDialogs = StaticPopupDialogs or {}
+-- === Custom Popup System (avoids StaticPopupDialogs taint in WoW 12.0) ===
+local CustomPopup = {}
 
-StaticPopupDialogs["FAT_EXPORT_PROFILE"] = {
-    text = "Export profile: %s\nCopy the string below:",
-    button1 = OKAY,
-    hasEditBox = true,
-    editBoxWidth = 420,
-    timeout = 0,
-    whileDead = true,
-    hideOnEscape = true,
-    preferredIndex = 3,
-    OnShow = function(self)
-        self.EditBox:SetText(self.data or "")
-        self.EditBox:HighlightText()
-        self.EditBox:SetFocus()
-    end,
-    EditBoxOnEscapePressed = function(self) self:GetParent():Hide() end,
-    EditBoxOnEnterPressed = function(self) self:GetParent():Hide() end,
-}
+local function CreateCustomPopup()
+    if CustomPopup.frame then return end
 
-StaticPopupDialogs["FAT_IMPORT_PROFILE"] = {
-    text = "Import profile\nPaste an export string:",
-    button1 = OKAY,
-    button2 = CANCEL,
-    hasEditBox = true,
-    editBoxWidth = 420,
-    timeout = 0,
-    whileDead = true,
-    hideOnEscape = true,
-    preferredIndex = 3,
-    OnAccept = function(self)
-        local s = self.EditBox:GetText() or ""
-        local name, prof = ImportProfileString(s)
-        if not name or not prof then
-            if NS and NS.RefreshUI then NS.RefreshUI() end
+    local f = CreateFrame("Frame", nil, UIParent, "BackdropTemplate")
+    f:SetFrameStrata("DIALOG")
+    f:SetSize(450, 150)
+    f:SetPoint("CENTER")
+    f:SetClampedToScreen(true)
+    f:Hide()
+    f:SetBackdrop({
+        bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
+        edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+        tile = true, tileSize = 16, edgeSize = 16,
+        insets = { left = 4, right = 4, top = 4, bottom = 4 }
+    })
+    f:SetBackdropColor(0.1, 0.1, 0.1, 0.95)
+    f:SetBackdropBorderColor(0.6, 0.6, 0.6, 1)
+    f:EnableMouse(true)
+    f:SetMovable(true)
+    f:RegisterForDrag("LeftButton")
+    f:SetScript("OnDragStart", f.StartMoving)
+    f:SetScript("OnDragStop", f.StopMovingOrSizing)
 
-            print("|cff00c8ffFAT:|r Import failed (invalid string).")
-            return
+    -- Title text
+    local title = f:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+    title:SetPoint("TOP", 0, -12)
+    f.title = title
+
+    -- Description text
+    local desc = f:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+    desc:SetPoint("TOP", 0, -35)
+    desc:SetWidth(400)
+    f.desc = desc
+
+    -- Edit box (optional, shown when needed)
+    local editBox = CreateFrame("EditBox", nil, f, "InputBoxTemplate")
+    editBox:SetSize(380, 24)
+    editBox:SetPoint("TOP", 0, -60)
+    editBox:SetAutoFocus(false)
+    editBox:SetScript("OnEscapePressed", function() f:Hide() end)
+    editBox:SetScript("OnEnterPressed", function(self)
+        if f.onAccept then f.onAccept(self:GetText()) end
+        f:Hide()
+    end)
+    f.editBox = editBox
+
+    -- OK button
+    local okBtn = CreateFrame("Button", nil, f, "UIPanelButtonTemplate")
+    okBtn:SetSize(100, 24)
+    okBtn:SetText(OKAY or "OK")
+    okBtn:SetScript("OnClick", function()
+        if f.onAccept then f.onAccept(f.editBox:GetText()) end
+        f:Hide()
+    end)
+    f.okBtn = okBtn
+
+    -- Cancel button
+    local cancelBtn = CreateFrame("Button", nil, f, "UIPanelButtonTemplate")
+    cancelBtn:SetSize(100, 24)
+    cancelBtn:SetText(CANCEL or "Cancel")
+    cancelBtn:SetScript("OnClick", function() f:Hide() end)
+    f.cancelBtn = cancelBtn
+
+    -- Close on escape
+    f:SetScript("OnKeyDown", function(self, key)
+        if key == "ESCAPE" then
+            self:SetPropagateKeyboardInput(false)
+            self:Hide()
+        else
+            self:SetPropagateKeyboardInput(true)
         end
-        local root, charKey = FrameAlphaTweaksDB, (NS._charKey or GetCharKey())
-        local unique = MakeUniqueProfileName(name, root.profiles)
-        root.profiles[unique] = prof
-        root.profileKeys[charKey] = unique
-        NS._profileName = unique
-        cfg = CopyDefaults(NS.defaults, root.profiles[unique] or {})
-        root.profiles[unique] = cfg
-        NS.SetConfig(cfg)
-        ValidateGroups()
-        RebuildEntries()
-        print("|cff00c8ffFAT:|r Imported profile as |cffffff00" .. unique .. "|r.")
-    end,
-    OnShow = function(self)
-        self.EditBox:SetText("")
-        self.EditBox:SetFocus()
-    end,
-    EditBoxOnEscapePressed = function(self) self:GetParent():Hide() end,
-}
+    end)
+    f:EnableKeyboard(true)
 
-StaticPopupDialogs["FAT_NEW_PROFILE"] = {
-    text = "Create new profile\nEnter a name:",
-    button1 = OKAY,
-    button2 = CANCEL,
-    hasEditBox = true,
-    editBoxWidth = 260,
-    timeout = 0,
-    whileDead = true,
-    hideOnEscape = true,
-    preferredIndex = 3,
-    OnAccept = function(self)
-        local name = (self.EditBox:GetText() or ""):gsub("^%s+", ""):gsub("%s+$", "")
-        if name == "" then return end
-        local root, charKey = FrameAlphaTweaksDB, (NS._charKey or GetCharKey())
-        name = MakeUniqueProfileName(name, root.profiles)
-        root.profiles[name] = CopyDefaults(NS.defaults, {})
-        root.profileKeys[charKey] = name
-        NS._profileName = name
-        cfg = CopyDefaults(NS.defaults, root.profiles[name] or {})
-        root.profiles[name] = cfg
-        NS.SetConfig(cfg)
-        ValidateGroups()
-        RebuildEntries()
-        if NS and NS.RefreshUI then NS.RefreshUI() end
+    CustomPopup.frame = f
+end
 
-        print("|cff00c8ffFAT:|r Created profile |cffffff00" .. name .. "|r.")
-    end,
-    OnShow = function(self) self.EditBox:SetText(""); self.EditBox:SetFocus() end,
-    EditBoxOnEscapePressed = function(self) self:GetParent():Hide() end,
-}
+local function ShowCustomPopup(options)
+    CreateCustomPopup()
+    local f = CustomPopup.frame
 
-StaticPopupDialogs["FAT_RENAME_PROFILE"] = {
-    text = "Rename profile: %s\nEnter new name:",
-    button1 = OKAY,
-    button2 = CANCEL,
-    hasEditBox = true,
-    editBoxWidth = 260,
-    timeout = 0,
-    whileDead = true,
-    hideOnEscape = true,
-    preferredIndex = 3,
-    OnAccept = function(self, data)
-        local base = (self.EditBox:GetText() or ""):gsub("^%s+", ""):gsub("%s+$", "")
-        if base == "" then return end
+    f.title:SetText(options.title or "")
+    f.desc:SetText(options.text or "")
+    f.onAccept = options.onAccept
 
-        local root = FrameAlphaTweaksDB
-        if not root or not root.profiles then return end
+    -- Adjust layout based on whether we need edit box
+    if options.hasEditBox then
+        f.editBox:Show()
+        f.editBox:SetText(options.editBoxText or "")
+        if options.selectText then
+            f.editBox:HighlightText()
+        end
+        f.editBox:SetFocus()
+        f.okBtn:SetPoint("BOTTOMRIGHT", f, "BOTTOM", -10, 12)
+        f.cancelBtn:SetPoint("BOTTOMLEFT", f, "BOTTOM", 10, 12)
+        f:SetHeight(130)
+    else
+        f.editBox:Hide()
+        f.okBtn:SetPoint("BOTTOMRIGHT", f, "BOTTOM", -10, 12)
+        f.cancelBtn:SetPoint("BOTTOMLEFT", f, "BOTTOM", 10, 12)
+        f:SetHeight(100)
+    end
 
-        local oldName = data or (NS._profileName or "Default")
-        if not root.profiles[oldName] then return end
+    -- Show/hide cancel button
+    if options.showCancel == false then
+        f.cancelBtn:Hide()
+        f.okBtn:ClearAllPoints()
+        f.okBtn:SetPoint("BOTTOM", 0, 12)
+    else
+        f.cancelBtn:Show()
+    end
 
-        -- Can't "rename" to the same name
-        if base == oldName then return end
+    -- OK button text
+    f.okBtn:SetText(options.okText or OKAY or "OK")
 
-        local newName = MakeUniqueProfileName(base, root.profiles)
+    f:Show()
+end
 
-        -- Move profile table
-        root.profiles[newName] = root.profiles[oldName]
-        root.profiles[oldName] = nil
+-- Profile popup functions (replacing StaticPopupDialogs)
+local function ShowExportPopup(profileName, exportString)
+    ShowCustomPopup({
+        title = "Export Profile",
+        text = "Profile: " .. profileName .. "\nCopy the string below:",
+        hasEditBox = true,
+        editBoxText = exportString,
+        selectText = true,
+        showCancel = false,
+        okText = OKAY or "OK",
+        onAccept = function() end,  -- Just close
+    })
+end
 
-        -- Update any characters mapped to the old profile
-        root.profileKeys = root.profileKeys or {}
-        for ck, pn in pairs(root.profileKeys) do
-            if pn == oldName then
-                root.profileKeys[ck] = newName
+local function ShowImportPopup()
+    ShowCustomPopup({
+        title = "Import Profile",
+        text = "Paste an export string:",
+        hasEditBox = true,
+        editBoxText = "",
+        onAccept = function(text)
+            local s = text or ""
+            local name, prof = ImportProfileString(s)
+            if not name or not prof then
+                if NS and NS.RefreshUI then NS.RefreshUI() end
+                print("|cff00c8ffFAT:|r Import failed (invalid string).")
+                return
             end
-        end
+            local root, charKey = FrameAlphaTweaksDB, (NS._charKey or GetCharKey())
+            local unique = MakeUniqueProfileName(name, root.profiles)
+            root.profiles[unique] = prof
+            root.profileKeys[charKey] = unique
+            NS._profileName = unique
+            cfg = CopyDefaults(NS.defaults, root.profiles[unique] or {})
+            root.profiles[unique] = cfg
+            NS.SetConfig(cfg)
+            ValidateGroups()
+            RebuildEntries()
+            if NS and NS.RefreshUI then NS.RefreshUI() end
+            print("|cff00c8ffFAT:|r Imported profile as |cffffff00" .. unique .. "|r.")
+        end,
+    })
+end
 
-        -- Ensure current character points to the new profile (belt + suspenders)
-        local charKey = (NS._charKey or GetCharKey())
-        root.profileKeys[charKey] = newName
+local function ShowNewProfilePopup()
+    ShowCustomPopup({
+        title = "Create New Profile",
+        text = "Enter a name:",
+        hasEditBox = true,
+        editBoxText = "",
+        onAccept = function(text)
+            local name = (text or ""):gsub("^%s+", ""):gsub("%s+$", "")
+            if name == "" then return end
+            local root, charKey = FrameAlphaTweaksDB, (NS._charKey or GetCharKey())
+            name = MakeUniqueProfileName(name, root.profiles)
+            root.profiles[name] = CopyDefaults(NS.defaults, {})
+            root.profileKeys[charKey] = name
+            NS._profileName = name
+            cfg = CopyDefaults(NS.defaults, root.profiles[name] or {})
+            root.profiles[name] = cfg
+            NS.SetConfig(cfg)
+            ValidateGroups()
+            RebuildEntries()
+            if NS and NS.RefreshUI then NS.RefreshUI() end
+            print("|cff00c8ffFAT:|r Created profile |cffffff00" .. name .. "|r.")
+        end,
+    })
+end
 
-        -- Switch runtime to the renamed profile and refresh
-        NS._profileName = newName
-        cfg = CopyDefaults(NS.defaults, root.profiles[newName] or {})
-        root.profiles[newName] = cfg
-        NS.SetConfig(cfg)
+local function ShowRenameProfilePopup(oldName)
+    ShowCustomPopup({
+        title = "Rename Profile",
+        text = "Profile: " .. oldName .. "\nEnter new name:",
+        hasEditBox = true,
+        editBoxText = oldName,
+        selectText = true,
+        onAccept = function(text)
+            local base = (text or ""):gsub("^%s+", ""):gsub("%s+$", "")
+            if base == "" then return end
 
-        ValidateGroups()
-        RebuildEntries()
-        if NS and NS.RefreshUI then NS.RefreshUI() end
+            local root = FrameAlphaTweaksDB
+            if not root or not root.profiles then return end
+            if not root.profiles[oldName] then return end
+            if base == oldName then return end
 
-        print("|cff00c8ffFAT:|r Renamed profile |cffffff00" .. oldName .. "|r to |cffffff00" .. newName .. "|r.")
-    end,
-    OnShow = function(self)
-        local current = self.data or (NS._profileName or "Default")
-        self.EditBox:SetText(current)
-        self.EditBox:HighlightText()
-        self.EditBox:SetFocus()
-    end,
-    EditBoxOnEscapePressed = function(self) self:GetParent():Hide() end,
-}
+            local newName = MakeUniqueProfileName(base, root.profiles)
+            root.profiles[newName] = root.profiles[oldName]
+            root.profiles[oldName] = nil
 
-StaticPopupDialogs["FAT_COPY_PROFILE"] = {
-    text = "Duplicate profile: %s\nEnter new name:",
-    button1 = OKAY,
-    button2 = CANCEL,
-    hasEditBox = true,
-    editBoxWidth = 260,
-    timeout = 0,
-    whileDead = true,
-    hideOnEscape = true,
-    preferredIndex = 3,
-    OnAccept = function(self, data)
-        local base = (self.EditBox:GetText() or ""):gsub("^%s+", ""):gsub("%s+$", "")
-        if base == "" then return end
-        local root, charKey = FrameAlphaTweaksDB, (NS._charKey or GetCharKey())
-        local from = data or (NS._profileName or "Default")
-        local newName = MakeUniqueProfileName(base, root.profiles)
-        root.profiles[newName] = DeepCopy(root.profiles[from] or CopyDefaults(NS.defaults, {}))
-        root.profileKeys[charKey] = newName
-        NS._profileName = newName
-        cfg = CopyDefaults(NS.defaults, root.profiles[newName] or {})
-        root.profiles[newName] = cfg
-        NS.SetConfig(cfg)
-        ValidateGroups()
-        RebuildEntries()
-        if NS and NS.RefreshUI then NS.RefreshUI() end
+            root.profileKeys = root.profileKeys or {}
+            for ck, pn in pairs(root.profileKeys) do
+                if pn == oldName then
+                    root.profileKeys[ck] = newName
+                end
+            end
 
-        print("|cff00c8ffFAT:|r Copied to profile |cffffff00" .. newName .. "|r.")
-    end,
-    OnShow = function(self) self.EditBox:SetText(""); self.EditBox:SetFocus() end,
-    EditBoxOnEscapePressed = function(self) self:GetParent():Hide() end,
-}
+            local charKey = (NS._charKey or GetCharKey())
+            root.profileKeys[charKey] = newName
+            NS._profileName = newName
+            cfg = CopyDefaults(NS.defaults, root.profiles[newName] or {})
+            root.profiles[newName] = cfg
+            NS.SetConfig(cfg)
 
-StaticPopupDialogs["FAT_DELETE_PROFILE"] = {
-    text = "Delete profile: %s ?",
-    button1 = YES,
-    button2 = NO,
-    timeout = 0,
-    whileDead = true,
-    hideOnEscape = true,
-    preferredIndex = 3,
-    OnAccept = function(self, data)
-        local root, charKey = FrameAlphaTweaksDB, (NS._charKey or GetCharKey())
-        local name = data or (NS._profileName or "Default")
-        local count = 0
-        for _ in pairs(root.profiles) do count = count + 1 end
-        if count <= 1 then
-            print("|cff00c8ffFAT:|r You can't delete the last profile.")
-            return
-        end
-        root.profiles[name] = nil
-        local fallback = "Default"
-        if not root.profiles[fallback] then
-            for n in pairs(root.profiles) do fallback = n; break end
-        end
-        root.profileKeys[charKey] = fallback
-        NS._profileName = fallback
-        cfg = CopyDefaults(NS.defaults, root.profiles[fallback] or {})
-        root.profiles[fallback] = cfg
-        NS.SetConfig(cfg)
-        ValidateGroups()
-        RebuildEntries()
-        if NS and NS.RefreshUI then NS.RefreshUI() end
-        print("|cff00c8ffFAT:|r Deleted profile; switched to |cffffff00" .. fallback .. "|r.")
-    end,
-}
+            ValidateGroups()
+            RebuildEntries()
+            if NS and NS.RefreshUI then NS.RefreshUI() end
+            print("|cff00c8ffFAT:|r Renamed profile |cffffff00" .. oldName .. "|r to |cffffff00" .. newName .. "|r.")
+        end,
+    })
+end
+
+local function ShowCopyProfilePopup(fromName)
+    ShowCustomPopup({
+        title = "Duplicate Profile",
+        text = "Profile: " .. fromName .. "\nEnter name for copy:",
+        hasEditBox = true,
+        editBoxText = "",
+        onAccept = function(text)
+            local base = (text or ""):gsub("^%s+", ""):gsub("%s+$", "")
+            if base == "" then return end
+            local root, charKey = FrameAlphaTweaksDB, (NS._charKey or GetCharKey())
+            local newName = MakeUniqueProfileName(base, root.profiles)
+            root.profiles[newName] = DeepCopy(root.profiles[fromName] or CopyDefaults(NS.defaults, {}))
+            root.profileKeys[charKey] = newName
+            NS._profileName = newName
+            cfg = CopyDefaults(NS.defaults, root.profiles[newName] or {})
+            root.profiles[newName] = cfg
+            NS.SetConfig(cfg)
+            ValidateGroups()
+            RebuildEntries()
+            if NS and NS.RefreshUI then NS.RefreshUI() end
+            print("|cff00c8ffFAT:|r Copied to profile |cffffff00" .. newName .. "|r.")
+        end,
+    })
+end
+
+local function ShowDeleteProfilePopup(profileName)
+    ShowCustomPopup({
+        title = "Delete Profile",
+        text = "Are you sure you want to delete profile:\n" .. profileName .. "?",
+        hasEditBox = false,
+        okText = YES or "Yes",
+        onAccept = function()
+            local root, charKey = FrameAlphaTweaksDB, (NS._charKey or GetCharKey())
+            local count = 0
+            for _ in pairs(root.profiles) do count = count + 1 end
+            if count <= 1 then
+                print("|cff00c8ffFAT:|r You can't delete the last profile.")
+                return
+            end
+            root.profiles[profileName] = nil
+            local fallback = "Default"
+            if not root.profiles[fallback] then
+                for n in pairs(root.profiles) do fallback = n; break end
+            end
+            root.profileKeys[charKey] = fallback
+            NS._profileName = fallback
+            cfg = CopyDefaults(NS.defaults, root.profiles[fallback] or {})
+            root.profiles[fallback] = cfg
+            NS.SetConfig(cfg)
+            ValidateGroups()
+            RebuildEntries()
+            if NS and NS.RefreshUI then NS.RefreshUI() end
+            print("|cff00c8ffFAT:|r Deleted profile; switched to |cffffff00" .. fallback .. "|r.")
+        end,
+    })
+end
+
+local function ShowDeleteGroupPopup(groupName, onConfirm)
+    ShowCustomPopup({
+        title = "Delete Group",
+        text = "Are you sure you want to delete group:\n" .. groupName .. "?",
+        hasEditBox = false,
+        okText = YES or "Yes",
+        onAccept = onConfirm,
+    })
+end
 
 -- === AceGUI Config Window (ElvUI will skin Ace3 widgets automatically) ===
 
@@ -319,18 +400,43 @@ else
     end
 
     -- Frame move helper (middle click on a frame row)
-    local function EnsureMoveDropDown()
-        if UI.moveDropDown and UI.moveDropDown.IsObjectType and UI.moveDropDown:IsObjectType("Frame") then
+    -- Custom popup menu to avoid taint from UIDropDownMenuTemplate
+    local function EnsureMovePopup()
+        if UI.movePopup and UI.movePopup.IsObjectType and UI.movePopup:IsObjectType("Frame") then
             return
         end
-        -- Use a dropdown menu (more reliable than AceGUI popups for click handling)
-        UI.moveDropDown = CreateFrame("Frame", "FAT_MoveDropDown", UIParent, "UIDropDownMenuTemplate")
-        UI.moveDropDown:Hide()
+        local popup = CreateFrame("Frame", nil, UIParent, "BackdropTemplate")
+        popup:SetFrameStrata("FULLSCREEN_DIALOG")
+        popup:SetClampedToScreen(true)
+        popup:Hide()
+        popup:SetBackdrop({
+            bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
+            edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+            tile = true, tileSize = 16, edgeSize = 16,
+            insets = { left = 4, right = 4, top = 4, bottom = 4 }
+        })
+        popup:SetBackdropColor(0.1, 0.1, 0.1, 0.95)
+        popup:SetBackdropBorderColor(0.6, 0.6, 0.6, 1)
+        popup.buttons = {}
+
+        -- Close when clicking outside
+        popup:SetScript("OnShow", function(self)
+            self:SetScript("OnUpdate", function(s)
+                if not MouseIsOver(s) and IsMouseButtonDown("LeftButton") then
+                    s:Hide()
+                end
+            end)
+        end)
+        popup:SetScript("OnHide", function(self)
+            self:SetScript("OnUpdate", nil)
+        end)
+
+        UI.movePopup = popup
     end
 
     local function CloseMoveFrameWindow()
-        if CloseDropDownMenus then
-            CloseDropDownMenus()
+        if UI.movePopup then
+            UI.movePopup:Hide()
         end
     end
 
@@ -381,21 +487,30 @@ else
 
     local function OpenMoveFrameWindow(frameName, anchorFrame)
         if not frameName then return end
-        EnsureMoveDropDown()
+        EnsureMovePopup()
 
+        local popup = UI.movePopup
         local current = UI.selectedGroup or 1
-        local menu = {}
 
-        menu[#menu + 1] = { text = "Move Frame", isTitle = true, notCheckable = true }
-        menu[#menu + 1] = { text = frameName, isTitle = true, notCheckable = true }
-        menu[#menu + 1] = { text = " ", notCheckable = true, disabled = true }
+        -- Clear existing buttons
+        for _, btn in ipairs(popup.buttons) do
+            btn:Hide()
+            btn:SetParent(nil)
+        end
+        wipe(popup.buttons)
 
+        -- Build menu items
+        local items = {}
+        items[#items + 1] = { text = "Move Frame", isTitle = true }
+        items[#items + 1] = { text = frameName, isTitle = true, highlight = true }
+
+        local hasTargets = false
         for idx, grp in ipairs(cfg.groups or {}) do
             if idx ~= current then
+                hasTargets = true
                 local gname = grp.name or ("Group " .. idx)
-                menu[#menu + 1] = {
+                items[#items + 1] = {
                     text = gname,
-                    notCheckable = true,
                     func = function()
                         CloseMoveFrameWindow()
                         MoveFrameToGroup(frameName, idx, current)
@@ -404,23 +519,58 @@ else
             end
         end
 
-        if #menu <= 3 then
-            menu[#menu + 1] = { text = "(No other groups)", notCheckable = true, disabled = true }
+        if not hasTargets then
+            items[#items + 1] = { text = "(No other groups)", disabled = true }
         end
 
-        if EasyMenu then
-            EasyMenu(menu, UI.moveDropDown, anchorFrame or "cursor", 0, 0, "MENU", 2)
-        else
-            UIDropDownMenu_Initialize(UI.moveDropDown, function(self, level)
-                if level ~= 1 then return end
-                for _, item in ipairs(menu) do
-                    local info = UIDropDownMenu_CreateInfo()
-                    for k, v in pairs(item) do info[k] = v end
-                    UIDropDownMenu_AddButton(info, level)
-                end
-            end, "MENU")
-            ToggleDropDownMenu(1, nil, UI.moveDropDown, anchorFrame or "cursor", 0, 0)
+        -- Create buttons
+        local BUTTON_HEIGHT = 20
+        local BUTTON_WIDTH = 180
+        local PADDING = 8
+        local yOffset = -PADDING
+
+        for i, item in ipairs(items) do
+            local btn = CreateFrame("Button", nil, popup)
+            btn:SetSize(BUTTON_WIDTH, BUTTON_HEIGHT)
+            btn:SetPoint("TOPLEFT", popup, "TOPLEFT", PADDING, yOffset)
+
+            local text = btn:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+            text:SetPoint("LEFT", 8, 0)
+            text:SetPoint("RIGHT", -8, 0)
+            text:SetJustifyH("LEFT")
+            text:SetText(item.text)
+
+            if item.isTitle then
+                text:SetFontObject(item.highlight and "GameFontHighlightSmall" or "GameFontNormalSmall")
+                btn:Disable()
+            elseif item.disabled then
+                text:SetTextColor(0.5, 0.5, 0.5)
+                btn:Disable()
+            else
+                text:SetTextColor(1, 1, 1)
+                btn:SetHighlightTexture("Interface\\QuestFrame\\UI-QuestTitleHighlight", "ADD")
+                btn:SetScript("OnClick", item.func)
+            end
+
+            popup.buttons[#popup.buttons + 1] = btn
+            yOffset = yOffset - BUTTON_HEIGHT
         end
+
+        -- Size and position popup
+        popup:SetSize(BUTTON_WIDTH + PADDING * 2, (#items * BUTTON_HEIGHT) + PADDING * 2)
+
+        if anchorFrame and anchorFrame.GetCenter then
+            local x, y = anchorFrame:GetCenter()
+            popup:ClearAllPoints()
+            popup:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", x, y)
+        else
+            local x, y = GetCursorPosition()
+            local scale = UIParent:GetEffectiveScale()
+            popup:ClearAllPoints()
+            popup:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", x / scale, y / scale)
+        end
+
+        popup:Show()
     end
 
     local function FindIndexFromCursor(rowFrames)
@@ -687,20 +837,9 @@ else
 if f.frame then
     f.frame:SetFrameStrata("MEDIUM")
     f.frame:SetFrameLevel(10)
-
-    -- Close on ESC without touching UISpecialFrames or creating globals (avoids common taint vectors)
-    f.frame:EnableKeyboard(true)
-    f.frame:SetPropagateKeyboardInput(true)
-    f.frame:SetScript("OnKeyDown", function(self, key)
-        if key == "ESCAPE" then
-            self:Hide()
-            self:SetPropagateKeyboardInput(false)
-        end
-    end)
-    f.frame:HookScript("OnHide", function(self)
-        -- Ensure we don't block ESC elsewhere after closing
-        self:SetPropagateKeyboardInput(true)
-    end)
+    -- ESC-to-close is handled by AceGUI's Frame widget natively.
+    -- We avoid SetPropagateKeyboardInput and HookScript to prevent taint
+    -- issues with Blizzard panels in WoW 12.0.
 end
 
         f:SetCallback("OnClose", function(widget)
@@ -777,30 +916,30 @@ end
             return b
         end
 
-        HeaderButton("New", 60, function() StaticPopup_Show("FAT_NEW_PROFILE") end)
+        HeaderButton("New", 60, function() ShowNewProfilePopup() end)
         HeaderButton("Rename", 80, function()
             local active = (NS._profileName or profName or "Default")
             NS._profileName = active
-            StaticPopup_Show("FAT_RENAME_PROFILE", active, nil, active)
+            ShowRenameProfilePopup(active)
         end)
 
         HeaderButton("Duplicate", 90, function()
             local active = (NS._profileName or profName or "Default")
             NS._profileName = active
-            StaticPopup_Show("FAT_COPY_PROFILE", active, nil, active)
+            ShowCopyProfilePopup(active)
         end)
         HeaderButton("Delete", 70, function()
             local active = (NS._profileName or profName or "Default")
             NS._profileName = active
-            StaticPopup_Show("FAT_DELETE_PROFILE", active, nil, active)
+            ShowDeleteProfilePopup(active)
         end)
         HeaderButton("Export", 70, function()
             local root = FrameAlphaTweaksDB
             local active = (NS._profileName or profName or "Default")
             local s = ExportProfileString(active, root.profiles[active])
-            StaticPopup_Show("FAT_EXPORT_PROFILE", active, nil, s)
+            ShowExportPopup(active, s)
         end)
-        HeaderButton("Import", 70, function() StaticPopup_Show("FAT_IMPORT_PROFILE") end)
+        HeaderButton("Import", 70, function() ShowImportPopup() end)
 
 
         -- Enable addon checkbox
@@ -873,41 +1012,22 @@ end
             local idx = UI.selectedGroup or 1
             local name = (cfg.groups[idx] and cfg.groups[idx].name) or ("Group " .. idx)
 
-            -- Confirm delete
-            NS._pendingDeleteGroup = idx
-            if not StaticPopupDialogs["FAT_CONFIRM_DELETE_GROUP"] then
-                StaticPopupDialogs["FAT_CONFIRM_DELETE_GROUP"] = {
-                    text = "Delete group '%s'?",
-                    button1 = "Delete",
-                    button2 = "Cancel",
-                    timeout = 0,
-                    whileDead = true,
-                    hideOnEscape = true,
-                    preferredIndex = 3,
-                    OnAccept = function()
-                        local di = NS._pendingDeleteGroup or 1
-                        if #cfg.groups <= 1 then
-                            local d = CopyDefaults(NS.defaults.groups[1], {})
-                            d.name = "Default"
-                            d.frames = {}
-                            d.alpha = 0.5
-                            cfg.groups[1] = d
-                            UI.selectedGroup = 1
-                        else
-                            table.remove(cfg.groups, di)
-                            if UI.selectedGroup > #cfg.groups then UI.selectedGroup = #cfg.groups end
-                        end
-                        NS._pendingDeleteGroup = nil
-                        RebuildEntries()
-                        RefreshUI()
-                    end,
-                    OnCancel = function()
-                        NS._pendingDeleteGroup = nil
-                    end,
-                }
-            end
-            local popup = StaticPopup_Show("FAT_CONFIRM_DELETE_GROUP", name)
-            if popup then popup:SetFrameStrata("DIALOG") end
+            -- Confirm delete using custom popup (avoids StaticPopupDialogs taint)
+            ShowDeleteGroupPopup(name, function()
+                if #cfg.groups <= 1 then
+                    local d = CopyDefaults(NS.defaults.groups[1], {})
+                    d.name = "Default"
+                    d.frames = {}
+                    d.alpha = 0.5
+                    cfg.groups[1] = d
+                    UI.selectedGroup = 1
+                else
+                    table.remove(cfg.groups, idx)
+                    if UI.selectedGroup > #cfg.groups then UI.selectedGroup = #cfg.groups end
+                end
+                RebuildEntries()
+                RefreshUI()
+            end)
         end)
         gBtnRow:AddChild(delG)
 
@@ -1360,32 +1480,10 @@ end
     NS.HandleCombatState = HandleCombatState
 end
 
--- Optional: keep a tiny entry in Blizzard settings that just opens the standalone window.
+-- Settings API integration disabled to prevent taint errors in WoW 12.0
+-- The Settings.RegisterCanvasLayoutCategory and UIPanelButtonTemplate can cause
+-- taint when Blizzard UI panels (Talents, Character, etc.) are opened.
+-- Users can access configuration via /fat or the minimap button.
 NS.RegisterBlizzardOptionsStub = function()
-    if not Settings or not Settings.RegisterAddOnCategory then return end
-    local panel = CreateFrame("Frame", nil, nil)
-    panel.name = "Frame Alpha Tweaks"
-    local category = Settings.RegisterCanvasLayoutCategory(panel, panel.name)
-    Settings.RegisterAddOnCategory(category)
-
-    panel:SetScript("OnShow", function(self)
-        if self._built then return end
-        self._built = true
-        local t = self:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
-        t:SetPoint("TOPLEFT", 16, -16)
-        t:SetText("Frame Alpha Tweaks")
-
-        local d = self:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
-        d:SetPoint("TOPLEFT", 16, -46)
-        d:SetJustifyH("LEFT")
-        d:SetText("This addon uses a standalone configuration window.\nOpen it with /fat, the minimap button, or the button below.")
-
-        local b = CreateFrame("Button", nil, self, "UIPanelButtonTemplate")
-        b:SetSize(200, 24)
-        b:SetPoint("TOPLEFT", 16, -90)
-        b:SetText("Open Config Window")
-        b:SetScript("OnClick", function()
-            if NS.ToggleConfig then NS.ToggleConfig() end
-        end)
-    end)
+    -- Intentionally disabled - see comment above
 end
