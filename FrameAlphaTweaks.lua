@@ -375,7 +375,7 @@ NS.GetConfig = GetConfig
 
 local function GetFadeParent(groupIndex)
     if not fadeParents[groupIndex] then
-        fadeParents[groupIndex] = CreateFrame("Frame", "FAT_FadeParent" .. groupIndex, UIParent)
+        fadeParents[groupIndex] = CreateFrame("Frame", "FAT_FadeParent" .. groupIndex, UIParent, "SecureHandlerStateTemplate")
     end
     return fadeParents[groupIndex]
 end
@@ -542,6 +542,7 @@ local function ForceSetAlpha(entry, alpha)
     if not entry or not entry.ref then return end
     if entry.usesFadeParent then return end
     local f = entry.ref
+    if f.IsProtected and f:IsProtected() and InCombatLockdown() then return end
     if f.SetIgnoreParentAlpha then pcall(f.SetIgnoreParentAlpha, f, true) end
     if entry.lastAlpha ~= alpha then
         pcall(f.SetAlpha, f, alpha)
