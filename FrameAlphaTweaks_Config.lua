@@ -293,6 +293,18 @@ else
         return g and (g.combat or g.target or g.mouseover or g.groupMouseover)
     end
 
+    local function SafeClearAllPoints(frame)
+        if not frame then return end
+        if InCombatLockdown and InCombatLockdown() then return end
+        frame:ClearAllPoints()
+    end
+
+    local function SafeSetPoint(frame, ...)
+        if not frame then return end
+        if InCombatLockdown and InCombatLockdown() then return end
+        frame:SetPoint(...)
+    end
+
     local function IsFrameProtected(frame)
         if not frame then return false end
         if frame.IsProtected then
@@ -509,9 +521,9 @@ else
 
     local function PositionDragLine(targetFrame)
         if not targetFrame or not UI._dragLine then return end
-        UI._dragLine:ClearAllPoints()
-        UI._dragLine:SetPoint("TOPLEFT", targetFrame, "TOPLEFT", 2, 1)
-        UI._dragLine:SetPoint("TOPRIGHT", targetFrame, "TOPRIGHT", -2, 1)
+        SafeClearAllPoints(UI._dragLine)
+        SafeSetPoint(UI._dragLine, "TOPLEFT", targetFrame, "TOPLEFT", 2, 1)
+        SafeSetPoint(UI._dragLine, "TOPRIGHT", targetFrame, "TOPRIGHT", -2, 1)
         UI._dragLine:Show()
     end
 
@@ -781,8 +793,8 @@ else
         headerLeft:SetHeight(70)
         headerRow:AddChild(headerLeft)
         if headerLeft.frame then
-            headerLeft.frame:ClearAllPoints()
-            headerLeft.frame:SetPoint("TOPLEFT", headerRow.frame, "TOPLEFT", 0, 0)
+            SafeClearAllPoints(headerLeft.frame)
+            SafeSetPoint(headerLeft.frame, "TOPLEFT", headerRow.frame, "TOPLEFT", 0, 0)
         end
 
         local headerHelp = AceGUI:Create("SimpleGroup")
@@ -791,8 +803,8 @@ else
         headerHelp:SetHeight(70)
         headerRow:AddChild(headerHelp)
         if headerHelp.frame then
-            headerHelp.frame:ClearAllPoints()
-            headerHelp.frame:SetPoint("TOPRIGHT", headerRow.frame, "TOPRIGHT", 0, 0)
+            SafeClearAllPoints(headerHelp.frame)
+            SafeSetPoint(headerHelp.frame, "TOPRIGHT", headerRow.frame, "TOPRIGHT", 0, 0)
         end
 
         local pLabel = AceGUI:Create("Label")
@@ -888,8 +900,8 @@ else
         cols:AddChild(groupsBox)
 
         if groupsBox.frame then
-            groupsBox.frame:ClearAllPoints()
-            groupsBox.frame:SetPoint("TOPLEFT", cols.frame, "TOPLEFT", 0, 0)
+            SafeClearAllPoints(groupsBox.frame)
+            SafeSetPoint(groupsBox.frame, "TOPLEFT", cols.frame, "TOPLEFT", 0, 0)
         end
 
         local gScroll = AceGUI:Create("ScrollFrame")
@@ -977,10 +989,10 @@ else
             if not w or w == 0 then w = UI._colW.groups end
             local total = newG.frame:GetWidth() + delG.frame:GetWidth() + gap
             local startX = math.floor((w - total) / 2 + 0.5)
-            newG.frame:ClearAllPoints()
-            newG.frame:SetPoint("TOPLEFT", anchor, "TOPLEFT", startX, -2)
-            delG.frame:ClearAllPoints()
-            delG.frame:SetPoint("TOPLEFT", newG.frame, "TOPRIGHT", gap, 0)
+            SafeClearAllPoints(newG.frame)
+            SafeSetPoint(newG.frame, "TOPLEFT", anchor, "TOPLEFT", startX, -2)
+            SafeClearAllPoints(delG.frame)
+            SafeSetPoint(delG.frame, "TOPLEFT", newG.frame, "TOPRIGHT", gap, 0)
         end
         if C_Timer and C_Timer.After then C_Timer.After(0, PositionGroupButtons) else PositionGroupButtons() end
 
@@ -993,8 +1005,8 @@ else
         cols:AddChild(framesBox)
 
         if framesBox.frame then
-            framesBox.frame:ClearAllPoints()
-            framesBox.frame:SetPoint("TOPLEFT", groupsBox.frame, "TOPRIGHT", 10, 0)
+            SafeClearAllPoints(framesBox.frame)
+            SafeSetPoint(framesBox.frame, "TOPLEFT", groupsBox.frame, "TOPRIGHT", 10, 0)
         end
 
         local addRow = AceGUI:Create("SimpleGroup")
@@ -1211,17 +1223,17 @@ else
             local startX = math.floor((w - total) / 2 + 0.5)
             if startX < 0 then startX = 0 end
 
-            infoBtn.frame:ClearAllPoints()
-            infoBtn.frame:SetPoint("TOPLEFT", anchor, "TOPLEFT", startX, -2)
+            SafeClearAllPoints(infoBtn.frame)
+            SafeSetPoint(infoBtn.frame, "TOPLEFT", anchor, "TOPLEFT", startX, -2)
 
-            frameEdit.frame:ClearAllPoints()
-            frameEdit.frame:SetPoint("TOPLEFT", infoBtn.frame, "TOPRIGHT", gap, 0)
+            SafeClearAllPoints(frameEdit.frame)
+            SafeSetPoint(frameEdit.frame, "TOPLEFT", infoBtn.frame, "TOPRIGHT", gap, 0)
 
-            addBtn.frame:ClearAllPoints()
-            addBtn.frame:SetPoint("TOPLEFT", frameEdit.frame, "TOPRIGHT", gap, 0)
+            SafeClearAllPoints(addBtn.frame)
+            SafeSetPoint(addBtn.frame, "TOPLEFT", frameEdit.frame, "TOPRIGHT", gap, 0)
 
-            presetsBtn.frame:ClearAllPoints()
-            presetsBtn.frame:SetPoint("TOPLEFT", addBtn.frame, "TOPRIGHT", gap, 0)
+            SafeClearAllPoints(presetsBtn.frame)
+            SafeSetPoint(presetsBtn.frame, "TOPLEFT", addBtn.frame, "TOPRIGHT", gap, 0)
         end
         if C_Timer and C_Timer.After then C_Timer.After(0, PositionFramesAddRow) else PositionFramesAddRow() end
 
@@ -1241,8 +1253,8 @@ else
         cols:AddChild(settingsBox)
 
         if settingsBox.frame then
-            settingsBox.frame:ClearAllPoints()
-            settingsBox.frame:SetPoint("TOPLEFT", framesBox.frame, "TOPRIGHT", 10, 0)
+            SafeClearAllPoints(settingsBox.frame)
+            SafeSetPoint(settingsBox.frame, "TOPLEFT", framesBox.frame, "TOPRIGHT", 10, 0)
         end
 
         local function CenterColumns()
@@ -1252,8 +1264,8 @@ else
             local total = (UI._colW.groups or 0) + 10 + (UI._colW.frames or 0) + 10 + (UI._colW.settings or 0)
             local x = math.floor((w - total) / 2 + 0.5)
             if x < 0 then x = 0 end
-            groupsBox.frame:ClearAllPoints()
-            groupsBox.frame:SetPoint("TOPLEFT", cols.frame, "TOPLEFT", x, 0)
+            SafeClearAllPoints(groupsBox.frame)
+            SafeSetPoint(groupsBox.frame, "TOPLEFT", cols.frame, "TOPLEFT", x, 0)
         end
         if C_Timer and C_Timer.After then C_Timer.After(0, CenterColumns) else CenterColumns() end
 
