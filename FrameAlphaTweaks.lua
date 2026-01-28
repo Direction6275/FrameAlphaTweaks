@@ -440,14 +440,27 @@ local function IsFrameProtected(frame)
     return false
 end
 
+local function IsFrameForbidden(frame)
+    if not frame then return false end
+    if frame.IsForbidden then
+        local ok, forbidden = pcall(frame.IsForbidden, frame)
+        if ok and forbidden then return true end
+    end
+    return false
+end
+
 local function ForceSetAlpha(entry, alpha)
     if not entry or not entry.ref then return end
+    if entry.isForbidden then return end
     if InCombatLockdown() then
         entry.isProtected = IsFrameProtected(entry.ref)
-        if entry.isProtected then return end
+        if entry.isProtected or entry.isUIPanel then return end
     end
     local f = entry.ref
-    if f.SetIgnoreParentAlpha then pcall(f.SetIgnoreParentAlpha, f, true) end
+    if not entry.isUIPanel and not entry.ignoreParentAlphaSet and f.SetIgnoreParentAlpha then
+        pcall(f.SetIgnoreParentAlpha, f, true)
+        entry.ignoreParentAlphaSet = true
+    end
     if entry.lastAlpha ~= alpha then
         pcall(f.SetAlpha, f, alpha)
         entry.lastAlpha = alpha
@@ -512,6 +525,8 @@ local function TryResolve(entry)
     if f then
         entry.ref = f
         entry.isProtected = IsFrameProtected(f)
+        entry.isForbidden = IsFrameForbidden(f)
+        entry.isUIPanel = (UIPanelWindows and UIPanelWindows[entry.name]) ~= nil
         return true
     end
     return false
@@ -531,9 +546,10 @@ end
 
 local function ApplyAlpha(entry, now, inCombat, hasTarget)
     if not entry.ref then return end
+    if entry.isForbidden then return end
     if inCombat then
         entry.isProtected = IsFrameProtected(entry.ref)
-        if entry.isProtected then return end
+        if entry.isProtected or entry.isUIPanel then return end
     end
 
     local target, forceFull = 1, false
