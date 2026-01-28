@@ -596,9 +596,11 @@ end
 local mainFrame = CreateFrame("Frame")
 local updateAccum = 0
 local UPDATE_INTERVAL = 1/30 -- ~30Hz is plenty smooth for fades
+local updatesSuspended = false
 
 mainFrame:SetScript("OnUpdate", function(_, dt)
     if not cfg then return end
+    if updatesSuspended then return end
     updateAccum = updateAccum + (dt or 0)
     if updateAccum < UPDATE_INTERVAL then return end
     updateAccum = 0
@@ -718,6 +720,7 @@ ev:SetScript("OnEvent", function(self, event, arg1, ...)
     end
 
     if event == "PLAYER_REGEN_DISABLED" then
+        updatesSuspended = true
         if NS.HandleCombatState then
             NS.HandleCombatState(true)
         end
@@ -725,6 +728,7 @@ ev:SetScript("OnEvent", function(self, event, arg1, ...)
     end
 
     if event == "PLAYER_REGEN_ENABLED" then
+        updatesSuspended = false
         if NS.HandleCombatState then
             NS.HandleCombatState(false)
         end
