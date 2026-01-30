@@ -1,8 +1,7 @@
 package-as: FrameAlphaTweaks
 
-manual-changelog: CHANGELOG.md
-changelog-type: markdown
-no-changelog: true
+curse-project-id: 1323669
+wago-project-id: ANzkZj64
 
 ignore:
   - README.md
