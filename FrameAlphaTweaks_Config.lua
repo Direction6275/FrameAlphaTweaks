@@ -1159,7 +1159,7 @@ end
         presetsBtn:SetText("Presets")
         presetsBtn:SetWidth(80)
 
-        local function AddFrameToGroup(frameName)
+        local function AddFrameToGroup(frameName, nickname)
             EnsureSelectedGroup()
             local g = cfg.groups[UI.selectedGroup]
             g.frames = g.frames or {}
@@ -1167,6 +1167,12 @@ end
                 if v == frameName then return end
             end
             table.insert(g.frames, frameName)
+            if nickname and nickname ~= "" then
+                cfg.nicknames = cfg.nicknames or {}
+                if not cfg.nicknames[frameName] then
+                    cfg.nicknames[frameName] = nickname
+                end
+            end
             RebuildEntries()
             RefreshUI()
         end
@@ -1213,7 +1219,7 @@ end
                         if item.tip then txt = txt .. " (" .. item.tip .. ")" end
                         b:SetFullWidth(true)
                         b:SetText("  " .. txt)
-                        b:SetCallback("OnClick", function() AddFrameToGroup(item.name) end)
+                        b:SetCallback("OnClick", function() AddFrameToGroup(item.name, item.tip) end)
 
                         row:AddChild(b)
                         UI.presetsScroll:AddChild(row)
