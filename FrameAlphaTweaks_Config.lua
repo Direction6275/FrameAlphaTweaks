@@ -319,6 +319,29 @@ local function ShowDeleteGroupPopup(groupName, onConfirm)
     })
 end
 
+local function ShowNicknamePopup(frameName)
+    local current = (cfg and cfg.nicknames and cfg.nicknames[frameName]) or ""
+    ShowCustomPopup({
+        title = "Set Nickname",
+        text = "Frame: " .. frameName .. "\nEnter a nickname (leave blank to clear):",
+        hasEditBox = true,
+        editBoxText = current,
+        selectText = true,
+        onAccept = function(text)
+            local nick = (text or ""):gsub("^%s+", ""):gsub("%s+$", "")
+            if not cfg then return end
+            cfg.nicknames = cfg.nicknames or {}
+            if nick == "" then
+                cfg.nicknames[frameName] = nil
+            else
+                cfg.nicknames[frameName] = nick
+            end
+            RebuildEntries()
+            if NS and NS.RefreshUI then NS.RefreshUI() end
+        end,
+    })
+end
+
 -- === AceGUI Config Window (ElvUI will skin Ace3 widgets automatically) ===
 
 local AceGUI = LibStub and LibStub("AceGUI-3.0", true)
@@ -674,10 +697,6 @@ else
             UI.profileDropdown:SetList(ProfilesList())
             UI.profileDropdown:SetValue(profName)
         end
-        if UI.enableCheckbox then
-            UI.enableCheckbox:SetValue(cfg.enabled and true or false)
-        end
-
         -- GROUPS LIST
         if UI.groupsScroll then
             UI.groupsScroll:ReleaseChildren()
@@ -741,12 +760,22 @@ else
                 row:SetFullWidth(true)
                 row:SetLayout("Flow")
 
-                -- Frame name button (Shift-left = move up, Shift-right = move down)
+                -- Frame name button (Shift-left = move up, Shift-right = move down, RMB = nickname)
                 local nameBtn = AceGUI:Create("Button")
-                nameBtn:SetText(fname)
+                local nickname = cfg.nicknames and cfg.nicknames[fname]
+                nameBtn:SetText(nickname or fname)
                 nameBtn:SetWidth((UI._colW and UI._colW.frames or 580) - 120)
                 if nameBtn.frame and nameBtn.frame.RegisterForClicks then
                     nameBtn.frame:RegisterForClicks("AnyUp")
+                end
+                -- Tooltip: show original frame name when a nickname is set
+                if nickname then
+                    nameBtn:SetCallback("OnEnter", function(widget)
+                        ShowTooltip(widget.frame, "Frame: " .. fname)
+                    end)
+                    nameBtn:SetCallback("OnLeave", function()
+                        HideTooltip()
+                    end)
                 end
                 nameBtn:SetCallback("OnClick", function(_, _, mouseButton)
                     if mouseButton == "MiddleButton" then
@@ -767,7 +796,11 @@ else
                             return
                         end
                     end
-                    -- Normal click: no-op (kept for future selection/highlight if desired)
+                    -- Right-click (without shift): open nickname popup
+                    if mouseButton == "RightButton" or mouseButton == "RightButtonUp" then
+                        ShowNicknamePopup(fname)
+                        return
+                    end
                 end)
                 row:AddChild(nameBtn)
 
@@ -942,17 +975,7 @@ end
         HeaderButton("Import", 70, function() ShowImportPopup() end)
 
 
-        -- Enable addon checkbox
-        local enable = AceGUI:Create("CheckBox")
-        UI.enableCheckbox = enable
-        enable:SetLabel("Enable Addon (Priority: Top groups override bottom groups)")
-        enable:SetFullWidth(true)
-        enable:SetValue(cfg.enabled and true or false)
-        enable:SetCallback("OnValueChanged", function(_, _, val)
-            cfg.enabled = val and true or false
-            RebuildEntries()
-        end)
-        f:AddChild(enable)        -- Columns container (manual anchoring: all columns share the same TOP baseline)
+        -- Columns container (manual anchoring: all columns share the same TOP baseline)
         UI._colH = 534
         UI._colW = { groups = 250, frames = 560, settings = 300 }
 
@@ -1070,7 +1093,7 @@ end
         infoBtn:SetWidth(60)
         addRow:AddChild(infoBtn)
         infoBtn:SetCallback("OnEnter", function(widget)
-            ShowTooltip(widget.frame, "Shift+LMB to move items up.\n\nShift+RMB to move items down.\n\nMMB to move a frame to another group.\n\nType /fstack and hover over frames to find frame names. Enter frame name into box and click 'Add' to add to current group. Frame names are case sensitive.")
+            ShowTooltip(widget.frame, "Shift+LMB to move items up.\n\nShift+RMB to move items down.\n\nMMB to move a frame to another group.\n\nRMB to set a nickname for a frame.\n\nType /fstack and hover over frames to find frame names. Enter frame name into box and click 'Add' to add to current group. Frame names are case sensitive.")
         end)
         infoBtn:SetCallback("OnLeave", function()
             HideTooltip()
@@ -1122,7 +1145,7 @@ end
         presetsBtn:SetText("Presets")
         presetsBtn:SetWidth(80)
 
-        local function AddFrameToGroup(frameName)
+        local function AddFrameToGroup(frameName, nickname)
             EnsureSelectedGroup()
             local g = cfg.groups[UI.selectedGroup]
             g.frames = g.frames or {}
@@ -1130,6 +1153,12 @@ end
                 if v == frameName then return end
             end
             table.insert(g.frames, frameName)
+            if nickname and nickname ~= "" then
+                cfg.nicknames = cfg.nicknames or {}
+                if not cfg.nicknames[frameName] then
+                    cfg.nicknames[frameName] = nickname
+                end
+            end
             RebuildEntries()
             RefreshUI()
         end
@@ -1176,7 +1205,7 @@ end
                         if item.tip then txt = txt .. " (" .. item.tip .. ")" end
                         b:SetFullWidth(true)
                         b:SetText("  " .. txt)
-                        b:SetCallback("OnClick", function() AddFrameToGroup(item.name) end)
+                        b:SetCallback("OnClick", function() AddFrameToGroup(item.name, item.tip) end)
 
                         row:AddChild(b)
                         UI.presetsScroll:AddChild(row)

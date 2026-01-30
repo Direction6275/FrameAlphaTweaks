@@ -22,11 +22,20 @@ local launcher = LDB:NewDataObject("FrameAlphaTweaks", {
   OnClick = function(_, button)
     if button == "LeftButton" then
       ToggleConfig()
+    elseif button == "RightButton" then
+      local cfg = NS.GetConfig and NS.GetConfig()
+      if cfg then
+        cfg.enabled = not cfg.enabled
+        if NS.RebuildEntries then NS.RebuildEntries() end
+        local state = cfg.enabled and "|cff00ff00Enabled|r" or "|cffff0000Disabled|r"
+        print("|cff00c8ffFAT:|r " .. state)
+      end
     end
   end,
   OnTooltipShow = function(tt)
     tt:AddLine("FrameAlphaTweaks")
     tt:AddLine("Left-click: Toggle Config", 1, 1, 1)
+    tt:AddLine("Right-click: Enable / Disable", 1, 1, 1)
   end,
 })
 
