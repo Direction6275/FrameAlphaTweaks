@@ -18,14 +18,15 @@ FrameAlphaTweaksDB = FrameAlphaTweaksDB or {}
 NS.defaults = {
     enabled = true,
     activeGroupIndex = 1,
+    nicknames = {},  -- frame name -> nickname mapping (profile-wide)
     groups = {
-        { 
-            name = "Default Group", 
-            alpha = 0.5, 
-            combat = true, 
-            target = true, 
-            mouseover = true, 
-            groupMouseover = false, 
+        {
+            name = "Default Group",
+            alpha = 0.5,
+            combat = true,
+            target = true,
+            mouseover = true,
+            groupMouseover = false,
             mouseoverDelay = 1.0, -- New Default: 1 second delay
             fadeInDuration = 0.2, -- Fade-in duration (seconds)
             fadeOutDuration = 0.2, -- Fade-out duration (seconds)
