@@ -697,10 +697,6 @@ else
             UI.profileDropdown:SetList(ProfilesList())
             UI.profileDropdown:SetValue(profName)
         end
-        if UI.enableCheckbox then
-            UI.enableCheckbox:SetValue(cfg.enabled and true or false)
-        end
-
         -- GROUPS LIST
         if UI.groupsScroll then
             UI.groupsScroll:ReleaseChildren()
@@ -979,17 +975,7 @@ end
         HeaderButton("Import", 70, function() ShowImportPopup() end)
 
 
-        -- Enable addon checkbox
-        local enable = AceGUI:Create("CheckBox")
-        UI.enableCheckbox = enable
-        enable:SetLabel("Enable Addon (Priority: Top groups override bottom groups)")
-        enable:SetFullWidth(true)
-        enable:SetValue(cfg.enabled and true or false)
-        enable:SetCallback("OnValueChanged", function(_, _, val)
-            cfg.enabled = val and true or false
-            RebuildEntries()
-        end)
-        f:AddChild(enable)        -- Columns container (manual anchoring: all columns share the same TOP baseline)
+        -- Columns container (manual anchoring: all columns share the same TOP baseline)
         UI._colH = 534
         UI._colW = { groups = 250, frames = 560, settings = 300 }
 
