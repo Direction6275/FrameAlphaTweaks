@@ -2,6 +2,7 @@
 ## Title: Frame Alpha Tweaks
 ## Notes: Fade/alpha tweaks for frames with group rules and profiles.
 ## Author: Cantrelle
+## IconTexture: Interface\AddOns\FrameAlphaTweaks\Media\fat.tga
 ## Version: @project-version@
 ## SavedVariables: FrameAlphaTweaksDB
 ## X-Curse-Project-ID: 1323669
